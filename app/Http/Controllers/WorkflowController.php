@@ -2,11 +2,36 @@
 namespace App\Http\Controllers;
 use App\Models\Workflow;
 use App\Models\WorkflowVersion;
+use App\Support\AutomationPresets;
+use App\Support\SetupHealth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 class WorkflowController extends Controller {
  private function shop(Request $r){return $r->attributes->get('currentShop');}
+ private function approvedTemplates($shop):array{if(!$shop->whatify_api_key)return [];try{return array_values(array_filter((new \App\Services\WhatifyClient($shop))->templates(),fn($t)=>strtolower($t['status']??'')==='approved'));}catch(\Throwable $e){return [];}}
+ public function presets(Request $r){
+  $shop=$this->shop($r);
+  $templates=$this->approvedTemplates($shop);
+  $byCategory=['utility'=>[],'marketing'=>[]];
+  foreach($templates as $t){$category=strtolower($t['category']??'utility');$byCategory[$category]??=[];$byCategory[$category][]=$t;}
+  $presets=AutomationPresets::all();
+  $installed=$shop->workflows()->whereNotNull('preset_key')->pluck('preset_key')->all();
+  return view('automations.presets',compact('presets','byCategory','installed'));
+ }
+ public function fromPreset(Request $r){
+  $shop=$this->shop($r);
+  $data=$r->validate(['preset_key'=>'required|string|max:64','name'=>'nullable|string|max:120','templates'=>'nullable|array','templates.*'=>'nullable|string|max:190']);
+  $preset=AutomationPresets::find($data['preset_key']);
+  if(!$preset)throw ValidationException::withMessages(['preset_key'=>'Choose one of the predefined automation templates.']);
+  $graph=AutomationPresets::graph($preset,$data['templates']??[]);
+  $workflow=$shop->workflows()->create(['name'=>trim((string)($data['name']??''))?:$preset['name'],'description'=>$preset['description'],'preset_key'=>$preset['key'],'draft_graph'=>$graph,'enabled'=>false]);
+  return redirect()->route('automations.edit',$workflow)->with('success','Predefined "'.$preset['name'].'" automation added. Confirm the WhatsApp template mapping, then Publish to switch it on.');
+ }
+ public function health(Request $r){
+  $health=app(SetupHealth::class)->build($this->shop($r));
+  return view('automations.health',compact('health'));
+ }
  public function index(Request $r){$query=$this->shop($r)->workflows()->withCount('executions')->latest();if($term=$r->query('q'))$query->where('name','like','%'.$term.'%');$workflows=$query->paginate(15)->withQueryString();return view('automations.index',compact('workflows'));}
  public function create(Request $r){$workflow=$this->shop($r)->workflows()->create(['name'=>'New automation','draft_graph'=>$this->starterGraph()]);return redirect()->route('automations.edit',$workflow);}
  public function edit(Request $r,Workflow $workflow){abort_unless($workflow->shop_id===$this->shop($r)->id,404);$workflow->load('publishedVersion');$graph=$workflow->draft_graph??$workflow->publishedVersion?->graph??$this->starterGraph();$templates=[];try{if($this->shop($r)->whatify_api_key)$templates=(new \App\Services\WhatifyClient($this->shop($r)))->templates();}catch(\Throwable $e){}$templates=array_values(array_filter($templates,fn($t)=>strtolower($t['status']??'')==='approved'));return view('automations.builder',compact('workflow','graph','templates'));}

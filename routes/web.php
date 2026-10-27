@@ -16,6 +16,9 @@ Route::delete('/integrations/whatify', [IntegrationController::class,'disconnect
 Route::delete('/integrations/shopify', [IntegrationController::class,'disconnectShopify'])->middleware('shop.connected')->name('integrations.shopify.disconnect');
 
 Route::middleware('shop.connected')->group(function(){
+ Route::get('/automations/presets',[WorkflowController::class,'presets'])->name('automations.presets');
+ Route::post('/automations/from-preset',[WorkflowController::class,'fromPreset'])->name('automations.from-preset');
+ Route::get('/automations/health',[WorkflowController::class,'health'])->name('automations.health');
  Route::get('/automations',[WorkflowController::class,'index'])->name('automations.index');
  Route::post('/automations',[WorkflowController::class,'create'])->name('automations.create');
  Route::get('/automations/{workflow}/edit',[WorkflowController::class,'edit'])->name('automations.edit');

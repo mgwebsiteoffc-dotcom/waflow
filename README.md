@@ -68,6 +68,26 @@ The checked-in TOML is configured as `embedded = false`, matching the current se
 6. Configure Whatify to POST signed inbound reply events to `/api/webhooks/whatify/inbound`, and set `WHATIFY_WEBHOOK_SECRET` only after confirming Whatify's exact event schema and signature contract. `STOP`, `UNSUBSCRIBE`, `OPT OUT`, `END`, and `QUIT` opt the phone out of both consent purposes, scrub pending recovery data, and cancel queued/running/waiting executions. A stale checkout attribute/order tag cannot reverse STOP; re-opt-in requires an explicit opt-in on a checkout/order created afterward. Other replies route to a unique waiting workflow. The Whatify inbound signing/payload format has not been live-verified.
 7. Use transactional utility content for order notices only—no upsell or promotional material in order templates. Cart recovery is marketing-purpose and requires a marketing template. Monitor template status, quality, limits, and category; Meta review/re-categorization is not guaranteed.
 
+## Predefined automations and health diagnostics
+
+Merchants do not have to build flows from scratch. **Automations → Templates gallery** (`/automations/presets`) installs predefined, publish-validated workflows. Each card maps its WhatsApp step to one of the shop's currently approved Whatify templates before creation:
+
+| Preset | Trigger | Consent / category | What it does |
+| --- | --- | --- | --- |
+| COD order verification | `ORDERS_CREATE` | order-update opt-in · Utility | COD + opt-in conditions, confirmation template, reply wait, `whatify_cod_confirmed` / `whatify_needs_review` order tags |
+| Order confirmation | `ORDERS_CREATE` | order-update opt-in · Utility | Sends order number and total immediately after every opted-in order |
+| Abandoned cart recovery | `CHECKOUTS_CREATE` | separate marketing opt-in · Marketing | Waits the inactivity window, then one approved recovery template with secure recovery link; completed checkouts are suppressed |
+| Order shipped / delivery update | `FULFILLMENTS_CREATE` | order-update opt-in · Utility | Loads the linked order from Shopify and notifies the customer on fulfillment |
+
+Installed presets are stamped with `preset_key`; they remain ordinary editable workflows, so every node can be adjusted in the builder before publishing.
+
+**Automations → Automation health** (`/automations/health`) explains why messages are or are not sending. It checks the Shopify connection, the Whatify connection (live, cached for 5 minutes), approved Utility/Marketing templates, every workflow's template mapping (missing name, unapproved, or wrong category), enabled-workflow coverage per trigger, unpublished drafts, scheduler heartbeat, stuck/failed runs, webhook processing errors, stalled or consent-suppressed abandoned checkouts, and a 7-day breakdown of `message_logs` statuses in plain language (for example `skipped_no_marketing` → "no active cart-recovery marketing opt-in"). The dashboard shows a banner linking to the first open issue.
+
+Two scheduled commands keep delayed automations reliable:
+
+- `whatify:health-heartbeat` runs every minute and writes a cache timestamp so the health page can detect a stopped scheduler.
+- `whatify:recover-stalled-checkouts` runs every 15 minutes and re-dispatches recovery for `open` abandoned checkouts whose inactivity window has elapsed, covering cases where the originally delayed queue job was lost (worker restart, queue flush). `ProcessAbandonedCheckout` stays idempotent and re-validates consent, completion and eligibility before starting any workflow.
+
 ## Workflow model
 
 - Draft workflow graphs are JSON (`nodes` + `edges`); publishing creates an immutable version so in-flight runs use the version that started them.
@@ -81,7 +101,7 @@ Sensitive credentials, webhook payloads, message request/response details, recov
 
 ## Verification and limits
 
-- Automated tests cover the Laravel dashboard/builder paths, workflow versioning, checkout webhook ingestion, consent-gated recovery, STOP opt-out, and rotating Shopify offline tokens. MySQL, live Shopify OAuth/webhooks, live Whatify requests, Meta opt-in evidence, public HTTPS delivery, and platform reviews require real deployment/accounts and were not verified in this sandbox.
+- Automated tests cover the Laravel dashboard/builder paths, workflow versioning, predefined preset installation/publishing, automation health diagnostics, stalled-checkout recovery and the scheduler heartbeat, checkout webhook ingestion, consent-gated recovery, STOP opt-out, and rotating Shopify offline tokens. MySQL, live Shopify OAuth/webhooks, live Whatify requests, Meta opt-in evidence, public HTTPS delivery, and platform reviews require real deployment/accounts and were not verified in this sandbox.
 - Staff notification nodes currently create auditable events; email/SMS staff delivery is not implemented. Message-status polling, billing, production alerting, and richer analytics attribution remain product work.
 - The endpoint's ability to accept Whatify inbound events depends on Whatify confirming the exact webhook contract.
 - Add only approved template names, correct parameter order, and valid sending-account selection to workflows. Do not interpret code-level safeguards as proof that a merchant's consent capture or legal basis is valid.

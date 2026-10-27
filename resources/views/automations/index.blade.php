@@ -1,7 +1,18 @@
 @extends('layouts.app')
 @section('title','Automations')
 @section('content')
-<div class="topbar"><div><div class="eyebrow">Workspace / Automations</div><h1 class="page-title">Automations</h1><p class="subtitle">Build event-driven workflows for order verification, WhatsApp messages and Shopify actions.</p></div><form action="{{ route('automations.create') }}" method="POST">@csrf<button class="primary">＋ &nbsp;New automation</button></form></div>
+<div class="topbar"><div><div class="eyebrow">Workspace / Automations</div><h1 class="page-title">Automations</h1><p class="subtitle">Start from a predefined WhatsApp automation, or build event-driven workflows for order verification and Shopify actions.</p></div><div class="top-actions" style="display:flex;gap:9px"><a class="secondary" href="{{ route('automations.health') }}" style="text-decoration:none">Health check</a><a class="secondary" href="{{ route('automations.presets') }}" style="text-decoration:none">Templates gallery</a><form action="{{ route('automations.create') }}" method="POST">@csrf<button class="primary">＋ &nbsp;New automation</button></form></div></div>
+@if($workflows->total() === 0)
+<div class="panel" style="margin:16px 0;background:linear-gradient(135deg,#f5f1ff,#fff);border-color:#e3d8ff">
+ <div class="panelhead"><div><div class="paneltitle">Start with a ready-made automation</div><div class="panelhint">Predefined, compliance-safe flows for the four most common WhatsApp use cases.</div></div><a class="viewlink" href="{{ route('automations.presets') }}">Browse templates →</a></div>
+ <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+  <a class="pill blue" style="padding:8px 14px;font-size:11px;text-decoration:none" href="{{ route('automations.presets') }}">◉ COD order verification</a>
+  <a class="pill green" style="padding:8px 14px;font-size:11px;text-decoration:none" href="{{ route('automations.presets') }}">◉ Order confirmation</a>
+  <a class="pill" style="padding:8px 14px;font-size:11px;text-decoration:none" href="{{ route('automations.presets') }}">◷ Abandoned cart recovery</a>
+  <a class="pill green" style="padding:8px 14px;font-size:11px;text-decoration:none" href="{{ route('automations.presets') }}">♧ Order shipped / delivery update</a>
+ </div>
+</div>
+@endif
 <div class="panel"><div class="panelhead"><div><div class="paneltitle">Your workflows</div><div class="panelhint">{{ $workflows->total() }} workflows · published versions run independently of drafts</div></div><form method="GET" class="workflow-toolbar"><input class="field" name="q" value="{{ request('q') }}" placeholder="⌕ Search workflows…"><button class="secondary">Search</button></form></div>
 <div class="tablewrap"><table class="orders"><thead><tr><th>WORKFLOW</th><th>TRIGGER</th><th>RUNS</th><th>STATUS</th><th>UPDATED</th><th>ACTIONS</th></tr></thead><tbody>@forelse($workflows as $workflow)<tr><td><div class="customer"><span class="wficon">↗</span><div><b>{{ $workflow->name }}</b><div style="font-size:10px;color:#999;margin-top:3px">{{ $workflow->description ?: 'No description' }}</div></div></div></td><td>{{ $workflow->publishedVersion?->graph['nodes'][0]['config']['topic']??'Draft' }}</td><td><b>{{ number_format($workflow->executions_count) }}</b></td><td><span class="pill {{ $workflow->enabled?'green':'amber' }}">{{ $workflow->enabled?'Active':'Draft / paused' }}</span></td><td>{{ $workflow->updated_at->diffForHumans() }}</td><td><div class="formrow"><a class="tableaction" href="{{ route('automations.edit',$workflow) }}">Edit</a>@if($workflow->published_version_id)<form action="{{ route('automations.toggle',$workflow) }}" method="POST">@csrf<button class="tableaction">{{ $workflow->enabled?'Pause':'Enable' }}</button></form>@endif</div></td></tr>@empty<tr><td colspan="6" class="empty-state">No workflows yet. Create your first Shopify automation.</td></tr>@endforelse</tbody></table></div>{{ $workflows->links() }}</div>
 @endsection
