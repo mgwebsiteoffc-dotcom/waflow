@@ -39,5 +39,14 @@ class IntegrationController extends Controller {
   catch(\Throwable $e){throw ValidationException::withMessages(['api_key'=>'Whatify connection failed: '.$e->getMessage()]);}
  }
  public function disconnectWhatify(Request $request){$shop=$request->attributes->get('currentShop');if($shop){$shop->whatify_api_key=null;$shop->save();}return back()->with('success','Whatify credentials removed.');}
+ public function testShopify(Request $request,\App\Services\OrderSync $sync){
+  $shop=$request->attributes->get('currentShop');
+  try{
+   $info=$sync->testConnection($shop);
+   return back()->with('success','Shopify connection OK — authenticated as "'.$info['name'].'" ('.$info['domain'].'). GraphQL Admin API is reachable with the stored token.');
+  }catch(\Throwable $e){
+   return back()->with('error','Shopify connection test failed: '.mb_substr($e->getMessage(),0,300).' Re-install the app from Shopify if the token was revoked or expired.');
+  }
+ }
  public function disconnectShopify(Request $request){$shop=$request->attributes->get('currentShop');if($shop){$shop->installed=false;$shop->access_token=null;$shop->refresh_token=null;$shop->access_token_expires_at=null;$shop->refresh_token_expires_at=null;$shop->whatify_api_key=null;$shop->save();$request->session()->forget('shop_id');}return redirect()->route('dashboard')->with('success','App connection removed. Uninstall the app from Shopify as well to revoke Shopify-side installation.');}
 }

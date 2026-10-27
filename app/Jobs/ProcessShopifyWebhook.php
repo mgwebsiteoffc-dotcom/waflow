@@ -68,8 +68,7 @@ class ProcessShopifyWebhook implements ShouldQueue
                 $payload = $this->orderContextForFulfillment($shop, $payload, $admin);
             }
             if ($event->topic === 'ORDERS_CREATE') {
-                $this->upsertVerification($shop, $payload);
-                $this->markCheckoutRecovered($shop, $payload);
+                app(\App\Services\OrderSync::class)->ingestOrder($shop, $payload);
             }
             $phone = PhoneIdentity::normalize($payload['customer']['phone'] ?? $payload['phone'] ?? '');
             $payload['_whatify']['whatsapp_opted_in'] = $phone !== '' && $shop->whatsappConsents()->active()->where('phone_hash', PhoneIdentity::hash($phone))->exists();
@@ -212,105 +211,6 @@ class ProcessShopifyWebhook implements ShouldQueue
         return $shop->workflows()->where('enabled',true)->with('publishedVersion')->get()->contains(function ($workflow) {
             return collect($workflow->publishedVersion?->graph['nodes'] ?? [])->contains(fn($node)=>(($node['type']??'')==='trigger' && (($node['config']['topic']??'')==='CHECKOUTS_CREATE')));
         });
-    }
-
-    private function markCheckoutRecovered(Shop $shop, array $order): void
-    {
-        $tokenHash = CheckoutIdentity::hash((string) ($order['checkout_token'] ?? ''));
-        if (!$tokenHash) return;
-        $checkout = AbandonedCheckout::firstOrCreate(
-            ['shop_id'=>$shop->id,'checkout_token_hash'=>$tokenHash],
-            ['status'=>'recovered','completed_at'=>now()]
-        );
-        $checkout->update(['status'=>'recovered','completed_at'=>$checkout->completed_at ?? now(),'recovery_url'=>null,'item_summary'=>null,'customer_first_name'=>null,'phone'=>null,'abandoned_at'=>null]);
-        if ($checkout->creation_webhook_event_id) {
-            $shop->executions()->where('webhook_event_id',$checkout->creation_webhook_event_id)->whereIn('status',['queued','running','waiting'])->get()->each(function ($execution) use ($checkout) {
-                $execution->update(['status'=>'cancelled','finished_at'=>now(),'last_error'=>'Checkout completed before the recovery workflow finished.','trigger_payload'=>['_whatify'=>['abandoned_checkout_id'=>$checkout->id,'recovered'=>true]]]);
-            });
-        }
-    }
-
-    private function upsertVerification(Shop $shop, array $order): void
-    {
-        $orderId = $this->numericId((string) ($order['id'] ?? ''));
-        if (!$orderId) return;
-        $phone = PhoneIdentity::normalize($order['customer']['phone'] ?? $order['phone'] ?? '');
-        $this->recordExplicitOptIn($shop, $order, $phone);
-        $gateways = $order['payment_gateway_names'] ?? [];
-        $payment = implode(', ', array_map('strval', is_array($gateways) ? $gateways : [$gateways]));
-        $low = strtolower($payment);
-        $isCod = str_contains($low, 'cash on delivery') || (bool) preg_match('/\bcod\b/', $low);
-        $reasons = [];
-        $score = 0;
-        $total = (float) ($order['total_price'] ?? 0);
-        $customer = $order['customer'] ?? [];
-        $hash = PhoneIdentity::hash($phone);
-        $hasConsent = $hash && $shop->whatsappConsents()->active()->where('phone_hash', $hash)->exists();
-
-        if ($isCod && !$phone) { $score += 60; $reasons[] = 'No valid phone number on order'; }
-        if ($isCod && $phone && !$hasConsent) $reasons[] = 'No recorded WhatsApp opt-in; no message sent';
-        $threshold = (float) ($shop->settings['high_value_review_threshold'] ?? 50000);
-        $highValue = $isCod && $total >= $threshold && $threshold > 0;
-        if ($highValue) { $score += 25; $reasons[] = 'Order value exceeds configured review threshold'; }
-        $status = !$isCod ? 'not_required' : ((!$phone || $score >= 60 || $highValue) ? 'review' : (!$hasConsent ? 'not_contacted' : 'pending'));
-
-        OrderVerification::updateOrCreate(['shop_id'=>$shop->id,'shopify_order_id'=>$orderId], [
-            'shopify_customer_id'=>isset($customer['id']) ? (string) $this->numericId((string) $customer['id']) : null,
-            'order_name'=>$order['name'] ?? null,
-            'customer_name'=>trim(($customer['first_name'] ?? '').' '.($customer['last_name'] ?? '')) ?: null,
-            'customer_phone'=>$phone ?: null,
-            'customer_phone_hash'=>$hash,
-            'payment_method'=>$payment ?: 'unknown',
-            'order_total'=>$total,
-            'currency'=>$order['currency'] ?? null,
-            'status'=>$status,
-            'risk_score'=>min(100,$score),
-            'risk_reasons'=>$reasons,
-        ]);
-    }
-
-    private function recordExplicitOptIn(Shop $shop, array $order, string $phone): void
-    {
-        $hash = PhoneIdentity::hash($phone);
-        if (!$hash) return;
-        $attributes = $order['note_attributes'] ?? [];
-        $source = null;
-        foreach ($attributes as $attribute) {
-            $key = strtolower(trim((string) ($attribute['name'] ?? $attribute['key'] ?? '')));
-            $value = strtolower(trim((string) ($attribute['value'] ?? '')));
-            if (in_array($key, ['whatsapp_opt_in','whatsapp_consent','wa_opt_in'], true) && in_array($value, ['yes','true','1','on','opted_in','accepted'], true)) {
-                $source = 'shopify_order_note_attribute:'.$key;
-                break;
-            }
-        }
-        if (!$source) {
-            $tags = array_map('trim', explode(',', strtolower((string) ($order['tags'] ?? ''))));
-            if (in_array('whatsapp_opt_in', $tags, true)) $source = 'merchant_tag:whatsapp_opt_in';
-        }
-        if (!$source) return;
-        $customerId = $this->numericId((string) ($order['customer']['id'] ?? ''));
-        $orderId = $this->numericId((string) ($order['id'] ?? ''));
-        $consent = $shop->whatsappConsents()->where('phone_hash',$hash)->first();
-        $orderCreatedAt = null;
-        if (!empty($order['created_at'])) {
-            try { $orderCreatedAt = \Illuminate\Support\Carbon::parse($order['created_at']); }
-            catch (\Throwable) { $orderCreatedAt = null; }
-        }
-        // A delayed order webhook or stale tag must not reverse a previously received STOP.
-        $mayReOptIn = $consent?->status !== 'opted_out'
-            || ($consent->opted_out_at && $orderCreatedAt && $orderCreatedAt->gt($consent->opted_out_at));
-        if (!$mayReOptIn) return;
-        $values = [
-            'shopify_customer_id'=>$customerId ?: null,
-            'phone'=>$phone,
-            'status'=>'opted_in',
-            'source'=>$source,
-            'source_reference'=>($order['name'] ?? null) ?: ($orderId ? 'order:'.$orderId : null),
-            'consented_at'=>$consent?->status === 'opted_in' ? ($consent->consented_at ?? $orderCreatedAt ?? now()) : ($orderCreatedAt ?? now()),
-            'opted_out_at'=>null,
-        ];
-        if ($consent) $consent->update($values);
-        else $shop->whatsappConsents()->create(['phone_hash'=>$hash] + $values);
     }
 
     private function orderContextForFulfillment(Shop $shop, array $fulfillment, ShopifyAdmin $admin): array

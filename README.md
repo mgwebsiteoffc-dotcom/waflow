@@ -54,6 +54,18 @@ New public apps created from 1 April 2026 must use expiring offline access token
 
 The app uses Shopify GraphQL Admin API only, version `2026-10`. Webhook delivery verification uses the raw request body and Shopify HMAC; webhook IDs are deduplicated. Webhook payload fields are restricted in `shopify.app.toml` where possible. Customer-data requests create an app-held-data export; customer/shop redaction removes associated local records. The app must still be publicly reachable over HTTPS and configured/deployed correctly for Shopify to deliver these events.
 
+### Nothing is syncing — Shopify Partner/CLI checklist
+
+Orders only appear after Shopify **delivers a webhook** and the queue worker processes it. If the Orders page is empty and **Webhook events** (sidebar) shows no rows, Shopify is not calling the server at all. Work through this exact sequence:
+
+1. **Create the app in the Shopify Partner Dashboard** and copy its client ID and secret into `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` on the Laravel server.
+2. **Edit `shopify.app.toml`**: replace `client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"` and confirm `application_url` and the OAuth redirect match the real public HTTPS origin (the checked-in default is `https://waflow.whatify.in`). Without this step the deploy links nothing and no webhook subscriptions exist — this is the most common reason nothing syncs.
+3. **Deploy the configuration**: `shopify app config link` then `shopify app deploy`. The TOML already declares `orders/create`, `fulfillments/create`, `checkouts/create`, `checkouts/update`, `app/uninstalled` and the three mandatory compliance topics, all posting to `/api/webhooks/shopify`.
+4. **Install the app on the store** from a Shopify-owned surface (app listing or "Install on development store"). OAuth must complete so an offline token row exists; an unknown shop's webhooks are ignored.
+5. **Keep the processes running**: `php artisan queue:work` (webhook processing) and `php artisan schedule:work` (heartbeat, token rotation, stalled-checkout recovery). A received-but-unprocessed webhook shows as *Queued / waiting for worker* on the Webhook events page.
+6. **Protected customer data**: order/checkout customer fields (names, phone, addresses) require protected-customer approval in the Partner Dashboard for distribution; on a development store the webhooks still deliver, so use one to verify first.
+7. **Verify in-app**: Integrations → **Test connection** runs a live GraphQL `shop` query with the stored token; **Webhook events** proves delivery; Orders → **Sync recent orders** backfills up to 25 existing orders through the GraphQL Admin API (or run `php artisan whatify:sync-orders`). Backfill writes verification/consent rows only and never starts WhatsApp workflows, since webhooks cover future events and historical customers must not be messaged retroactively.
+
 ### Distribution and App Store prerequisites not completed in this codebase
 
 The checked-in TOML is configured as `embedded = false`, matching the current server-rendered OAuth/dashboard flow. Shopify App Store distribution expects an embedded merchant experience, current App Bridge/session-token authentication, a complete privacy policy and listing disclosures, and Shopify-compliant billing where the app charges. Those product/release steps are **not implemented or verified** here. Before pursuing App Store distribution, build and test the embedded/session-token experience, decide on Shopify Managed Pricing/Billing API if charging, submit for protected customer data as needed, deploy the TOML and public HTTPS app, and pass Shopify review. A private/custom distribution must still be registered/configured for its chosen distribution method.
@@ -119,6 +131,7 @@ Sensitive credentials, webhook payloads, message request/response details, recov
 
 - `app/Http/Controllers` — app pages, OAuth, order actions, webhooks
 - `app/Services/ShopifyAdmin.php` — Shopify GraphQL and rotating tokens
+- `app/Services/OrderSync.php` — GraphQL order backfill, connection test, shared order/opt-in/checkout ingest
 - `app/Services/WorkflowRunner.php` — workflow and opt-in enforcement
 - `app/Jobs` — queued webhooks, workflow runs, and privacy processing
 - `database/migrations` — MySQL schema

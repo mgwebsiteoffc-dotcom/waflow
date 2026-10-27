@@ -275,4 +275,47 @@ class PresetAndHealthTest extends TestCase
             ->assertSee('order_confirmation')
             ->assertDontSee('draft_one');
     }
+
+    public function test_manual_graphql_sync_ingests_orders_without_starting_workflows(): void
+    {
+        Http::fake(['*graphql.json' => Http::response(['data' => ['orders' => ['edges' => [
+            ['node' => ['id' => 'gid://shopify/Order/7001', 'name' => '#7001', 'createdAt' => now()->toIso8601String(),
+                'paymentGatewayNames' => ['razorpay'], 'tags' => [],
+                'totalPriceSet' => ['shopMoney' => ['amount' => '599.00', 'currencyCode' => 'INR']],
+                'customAttributes' => [],
+                'customer' => ['id' => 'gid://shopify/Customer/56', 'firstName' => 'Ravi', 'lastName' => 'K', 'phone' => '+919876543211']]],
+        ]]]], 200)]);
+        $shop = Shop::create(['shop_domain' => 'demo.myshopify.com', 'access_token' => 'test-token', 'refresh_token' => 'r', 'access_token_expires_at' => now()->addHour(), 'refresh_token_expires_at' => now()->addDays(80), 'installed' => true]);
+        $result = app(\App\Services\OrderSync::class)->syncRecentOrders($shop, 25);
+        $this->assertSame(1, $result['synced']);
+        $this->assertDatabaseHas('order_verifications', ['shop_id' => $shop->id, 'shopify_order_id' => '7001', 'status' => 'not_required']);
+        $this->assertDatabaseCount('workflow_executions', 0);
+        $this->assertDatabaseCount('message_logs', 0);
+    }
+
+    public function test_test_connection_reports_shop_identity(): void
+    {
+        Http::fake(['*graphql.json' => Http::response(['data' => ['shop' => ['name' => 'Demo Store', 'myshopifyDomain' => 'demo.myshopify.com', 'email' => 'o@demo.test']]], 200)]);
+        $shop = Shop::create(['shop_domain' => 'demo.myshopify.com', 'access_token' => 'test-token', 'refresh_token' => 'r', 'access_token_expires_at' => now()->addHour(), 'refresh_token_expires_at' => now()->addDays(80), 'installed' => true]);
+        $this->withSession(['shop_id' => $shop->id])
+            ->post(route('integrations.shopify.test'))
+            ->assertRedirect();
+        $this->assertSame('Demo Store', app(\App\Services\OrderSync::class)->testConnection($shop)['name']);
+    }
+
+    public function test_webhook_events_page_renders_empty_state_and_rows(): void
+    {
+        $shop = $this->shop();
+        $this->withSession(['shop_id' => $shop->id])
+            ->get(route('webhooks.index'))
+            ->assertOk()
+            ->assertSee('No webhooks have ever arrived');
+
+        \App\Models\WebhookEvent::create(['shop_id' => $shop->id, 'webhook_id' => 'evt-1', 'topic' => 'ORDERS_CREATE', 'payload' => [], 'processed_at' => now()]);
+        $this->withSession(['shop_id' => $shop->id])
+            ->get(route('webhooks.index'))
+            ->assertOk()
+            ->assertSee('ORDERS CREATE')
+            ->assertSee('Processed');
+    }
 }

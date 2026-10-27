@@ -8,7 +8,7 @@
 .webhook-meta b{color:#5d5c70;font-weight:700}
 </style>@endpush
 @section('content')
-<div class="topbar"><div><div class="eyebrow">Workspace / Orders</div><h1 class="page-title">Order verification</h1><p class="subtitle">Review COD confirmation and explainable risk signals received from Shopify.</p></div><span class="datepill">{{ $orders->total() }} tracked orders</span></div>
+<div class="topbar"><div><div class="eyebrow">Workspace / Orders</div><h1 class="page-title">Order verification</h1><p class="subtitle">Review COD confirmation and explainable risk signals received from Shopify.</p></div><div class="top-actions"><form method="POST" action="{{ route('orders.sync') }}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…'">@csrf<button class="secondary">⟳ Sync recent orders</button></form><a class="secondary" href="{{ route('webhooks.index') }}" style="text-decoration:none">Webhook events</a><span class="datepill">{{ $orders->total() }} tracked orders</span></div></div>
 
 @if($orders->total() === 0 && ! request('q'))
 <div class="panel" style="margin-bottom:16px;border-color:#f0e4ff;background:linear-gradient(135deg,#f8f5ff,#fff)">
@@ -17,9 +17,9 @@
   <div class="notice" style="margin-top:0"><span>ⓘ</span><p><strong>No Shopify webhooks have ever reached this app.</strong> This usually means the app is not fully installed or the Shopify app configuration (TOML webhook subscriptions) has not been deployed.</p></div>
   <ul class="diag-list">
    <li>Install the app from your Shopify admin and confirm the store shows <b>Connected</b> in <a href="{{ route('integrations.index') }}">Integrations</a>.</li>
-   <li>Deploy the Shopify app configuration so the <code>orders/create</code> webhook subscription is registered.</li>
+   <li>Deploy the Shopify app configuration (<code>shopify app config link</code> then <code>shopify app deploy</code>) so the <code>orders/create</code> webhook subscription is registered.</li>
    <li>Keep <code>php artisan queue:work</code> running — webhooks are processed asynchronously.</li>
-   <li>Place a test order on the store, then reload this page.</li>
+   <li>Use <b>Sync recent orders</b> above to backfill existing orders immediately, or place a test order and reload.</li>
   </ul>
  @elseif(! $lastOrderWebhookAt)
   <div class="notice" style="margin-top:0"><span>ⓘ</span><p><strong>{{ number_format($webhookCount) }} webhook(s) received, but none of them are order events.</strong> Events are arriving, so the connection works — check that the <code>orders/create</code> topic is included in the deployed Shopify app configuration.</p></div>
@@ -33,6 +33,7 @@
   <ul class="diag-list">
    <li>Ensure <code>php artisan queue:work</code> is running and not failing jobs.</li>
    <li>Open <a href="{{ route('automations.health') }}">Automation health</a> to see stuck runs or webhook errors.</li>
+   <li>Use <b>Sync recent orders</b> above to pull these orders through the GraphQL API without waiting for the queue.</li>
   </ul>
  @endif
  <div class="diag-actions"><a class="primary" href="{{ route('integrations.index') }}" style="text-decoration:none">Check integrations</a><a class="secondary" href="{{ route('automations.health') }}" style="text-decoration:none">Automation health</a></div>
