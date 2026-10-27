@@ -40,6 +40,15 @@ class WorkflowController extends Controller {
   $nodes=collect($graph['nodes']??[]);$hasCheckoutTrigger=$nodes->contains(fn($n)=>(($n['type']??'')==='trigger'&&(($n['config']['topic']??'')==='CHECKOUTS_CREATE')));$hasMarketing=$nodes->contains(fn($n)=>(($n['type']??'')==='send_template'&&(($n['config']['message_purpose']??'order_update')==='marketing')));if($hasMarketing&&!$hasCheckoutTrigger)throw ValidationException::withMessages(['graph'=>'Marketing-purpose WhatsApp steps require a checkout recovery trigger.']);
   DB::transaction(function()use($workflow,$graph){$w=Workflow::whereKey($workflow->id)->lockForUpdate()->firstOrFail();$v=(int)$w->versions()->max('version')+1;$version=$w->versions()->create(['version'=>$v,'graph'=>$graph,'published_at'=>now()]);$w->update(['published_version_id'=>$version->id,'enabled'=>true]);});return back()->with('success','Workflow published. New executions will use this immutable version.');}
  public function toggle(Request $r,Workflow $workflow){abort_unless($workflow->shop_id===$this->shop($r)->id,404);if(!$workflow->published_version_id)return back()->with('error','Publish the workflow before turning it on.');$workflow->update(['enabled'=>!$workflow->enabled]);return back()->with('success',$workflow->enabled?'Workflow enabled.':'Workflow paused.');}
+ public function destroy(Request $r,Workflow $workflow){
+  abort_unless($workflow->shop_id===$this->shop($r)->id,404);
+  $name=$workflow->name;
+  DB::transaction(function()use($workflow){
+   $workflow->executions()->whereIn('status',['queued','running','waiting'])->update(['status'=>'cancelled','finished_at'=>now(),'last_error'=>'Automation deleted by merchant.']);
+   $workflow->delete();
+  });
+  return redirect()->route('automations.index')->with('success','Automation "'.$name.'" deleted. Its workflow versions and run history were removed; WhatsApp message logs are retained for audit.');
+ }
  public function executions(Request $r){$runs=$this->shop($r)->executions()->with('workflow','events')->latest()->paginate(25);return view('automations.executions',compact('runs'));}
  private function starterGraph():array{return ['nodes'=>[
   ['id'=>'trigger-order','type'=>'trigger','title'=>'Order created','x'=>360,'y'=>20,'config'=>['topic'=>'ORDERS_CREATE']],

@@ -196,4 +196,83 @@ class PresetAndHealthTest extends TestCase
         $this->artisan('whatify:health-heartbeat')->assertExitCode(0);
         $this->assertNotNull(Cache::get(SetupHealth::HEARTBEAT_KEY));
     }
+
+    public function test_destroy_deletes_workflow_versions_and_executions_but_keeps_message_logs(): void
+    {
+        $shop = $this->shop();
+        $workflow = $shop->workflows()->create(['name' => 'Doomed', 'enabled' => true]);
+        $version = WorkflowVersion::create(['workflow_id' => $workflow->id, 'version' => 1, 'graph' => ['nodes' => [], 'edges' => []], 'published_at' => now()]);
+        $workflow->update(['published_version_id' => $version->id]);
+        $execution = \App\Models\WorkflowExecution::create([
+            'shop_id' => $shop->id, 'workflow_id' => $workflow->id, 'workflow_version_id' => $version->id,
+            'trigger_topic' => 'ORDERS_CREATE', 'trigger_payload' => [], 'current_node_id' => 't', 'status' => 'waiting',
+        ]);
+        $log = \App\Models\MessageLog::create([
+            'shop_id' => $shop->id, 'workflow_execution_id' => $execution->id, 'node_id' => 's',
+            'phone_hash' => 'h', 'phone' => '+12025550198', 'template_name' => 'tpl', 'status' => 'sent',
+        ]);
+
+        $this->withSession(['shop_id' => $shop->id])
+            ->delete(route('automations.destroy', $workflow))
+            ->assertRedirect(route('automations.index'));
+
+        $this->assertDatabaseMissing('workflows', ['id' => $workflow->id]);
+        $this->assertDatabaseMissing('workflow_versions', ['workflow_id' => $workflow->id]);
+        $this->assertDatabaseMissing('workflow_executions', ['workflow_id' => $workflow->id]);
+        $this->assertDatabaseHas('message_logs', ['id' => $log->id]);
+    }
+
+    public function test_destroy_rejects_a_workflow_owned_by_another_shop(): void
+    {
+        $shop = $this->shop();
+        $other = Shop::create(['shop_domain' => 'other.myshopify.com', 'access_token' => 't', 'installed' => true]);
+        $workflow = $other->workflows()->create(['name' => 'Foreign']);
+
+        $this->withSession(['shop_id' => $shop->id])
+            ->delete(route('automations.destroy', $workflow))
+            ->assertNotFound();
+        $this->assertDatabaseHas('workflows', ['id' => $workflow->id]);
+    }
+
+    public function test_orders_page_shows_setup_diagnostics_when_no_webhooks_arrived(): void
+    {
+        $shop = $this->shop();
+        $this->withSession(['shop_id' => $shop->id])
+            ->get(route('orders.index'))
+            ->assertOk()
+            ->assertSee('No Shopify webhooks have ever reached this app')
+            ->assertSee('Check integrations');
+    }
+
+    public function test_orders_page_distinguishes_non_order_webhooks(): void
+    {
+        $shop = $this->shop();
+        \App\Models\WebhookEvent::create([
+            'shop_id' => $shop->id, 'webhook_id' => 'w1', 'topic' => 'CHECKOUTS_CREATE',
+            'payload' => [], 'processed_at' => now(),
+        ]);
+        $this->withSession(['shop_id' => $shop->id])
+            ->get(route('orders.index'))
+            ->assertOk()
+            ->assertSee('none of them are order events')
+            ->assertDontSee('No Shopify webhooks have ever reached this app');
+    }
+
+    public function test_integrations_page_renders_approved_templates_as_grid_cards(): void
+    {
+        Http::fake([
+            '*whatify.in*/whatsapp-accounts' => Http::response(['success' => true, 'whatsapp_accounts' => []], 200),
+            '*whatify.in*/templates' => Http::response(['success' => true, 'templates' => [
+                ['name' => 'order_confirmation', 'status' => 'approved', 'category' => 'UTILITY', 'language' => 'en', 'body' => 'Thanks for your order'],
+                ['name' => 'draft_one', 'status' => 'pending', 'category' => 'UTILITY', 'language' => 'en'],
+            ]], 200),
+        ]);
+        $shop = $this->shop(true);
+        $this->withSession(['shop_id' => $shop->id])
+            ->get(route('integrations.index'))
+            ->assertOk()
+            ->assertSee('tpl-grid')
+            ->assertSee('order_confirmation')
+            ->assertDontSee('draft_one');
+    }
 }

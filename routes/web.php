@@ -25,6 +25,7 @@ Route::middleware('shop.connected')->group(function(){
  Route::put('/automations/{workflow}',[WorkflowController::class,'update'])->name('automations.update');
  Route::post('/automations/{workflow}/publish',[WorkflowController::class,'publish'])->name('automations.publish');
  Route::post('/automations/{workflow}/toggle',[WorkflowController::class,'toggle'])->name('automations.toggle');
+ Route::delete('/automations/{workflow}',[WorkflowController::class,'destroy'])->name('automations.destroy');
  Route::get('/executions',[WorkflowController::class,'executions'])->name('executions.index');
  Route::get('/privacy-requests/{privacyRequest}/export',[PrivacyRequestController::class,'download'])->name('privacy.export');
  Route::get('/orders',[OrderController::class,'index'])->name('orders.index');
