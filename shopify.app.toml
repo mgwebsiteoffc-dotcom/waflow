@@ -1,0 +1,38 @@
+# Deploy with Shopify CLI after linking a Partner Dashboard app.
+# Replace the client ID and public URL before linking/deploying.
+name = "Whatify Flow"
+client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"
+application_url = "https://waflow.whatify.in"
+embedded = false
+
+[access_scopes]
+scopes = "read_orders,write_orders"
+
+[auth]
+redirect_urls = ["https://waflow.whatify.in/integrations/shopify/callback"]
+
+[webhooks]
+api_version = "2026-10"
+
+[[webhooks.subscriptions]]
+topics = ["orders/create"]
+uri = "/api/webhooks/shopify"
+include_fields = ["id", "name", "created_at", "checkout_token", "customer.id", "customer.first_name", "customer.last_name", "customer.phone", "phone", "payment_gateway_names", "total_price", "currency", "note_attributes", "tags"]
+
+[[webhooks.subscriptions]]
+topics = ["fulfillments/create"]
+uri = "/api/webhooks/shopify"
+include_fields = ["id", "order_id", "status", "tracking_info"]
+
+[[webhooks.subscriptions]]
+topics = ["checkouts/create", "checkouts/update"]
+uri = "/api/webhooks/shopify"
+include_fields = ["token", "name", "customer.id", "customer.first_name", "customer.phone", "phone", "completed_at", "created_at", "updated_at", "abandoned_checkout_url", "line_items.title", "line_items.quantity", "total_price", "currency", "note_attributes"]
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled"]
+uri = "/api/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "/api/webhooks/shopify"

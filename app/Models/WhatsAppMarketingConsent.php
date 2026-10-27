@@ -1,0 +1,14 @@
+<?php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class WhatsAppMarketingConsent extends Model
+{
+    protected $table = 'whatsapp_marketing_consents';
+    protected $fillable = ['shop_id','shopify_customer_id','phone_hash','phone','status','source','source_reference','consented_at','opted_out_at'];
+    protected $casts = ['phone'=>'encrypted','consented_at'=>'datetime','opted_out_at'=>'datetime'];
+
+    public function shop(){return $this->belongsTo(Shop::class);}
+    public function scopeActive($query){return $query->where('status','opted_in');}
+}

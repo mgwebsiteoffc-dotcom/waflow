@@ -1,0 +1,2 @@
+<?php
+return ['data_hash_key'=>env('DATA_HASH_KEY',env('APP_KEY')),'shopify'=>['api_key'=>env('SHOPIFY_API_KEY'),'api_secret'=>env('SHOPIFY_API_SECRET'),'scopes'=>env('SHOPIFY_SCOPES','read_orders,write_orders'),'api_version'=>env('SHOPIFY_API_VERSION','2026-10'),'abandoned_checkout_delay_minutes'=>max(10,min(1440,(int)env('ABANDONED_CHECKOUT_DELAY_MINUTES',60)))],'whatify'=>['base_url'=>env('WHATIFY_BASE_URL','https://whatify.in/api/v1/external'),'webhook_secret'=>env('WHATIFY_WEBHOOK_SECRET')]];
