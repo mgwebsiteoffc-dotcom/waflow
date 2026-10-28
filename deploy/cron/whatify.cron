@@ -1,0 +1,9 @@
+# Whatify Flow — cron fallback for servers without Supervisor/systemd daemons.
+# Install with: crontab -e   (as the web server user, e.g. www-data)
+# Adjust /var/www/waflow and the php path to your server.
+#
+# Laravel scheduler every minute (heartbeat, token refresh, recovery, prune)
+* * * * * cd /var/www/waflow && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
+#
+# Drain queued jobs once a minute; the worker exits when empty or after 50s
+* * * * * cd /var/www/waflow && /usr/bin/php artisan queue:work --stop-when-empty --max-time=50 --tries=3 >> storage/logs/queue-cron.log 2>&1

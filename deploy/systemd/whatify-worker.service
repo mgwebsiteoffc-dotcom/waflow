@@ -1,0 +1,12 @@
+[Unit]
+Description=Whatify Flow queue worker
+After=network.target mysql.service
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/waflow
+ExecStart=/usr/bin/php artisan queue:work database --sleep=3 --tries=3 --backoff=10 --timeout=120 --max-time=3600
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
