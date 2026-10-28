@@ -49,6 +49,8 @@ class SetupHealth
         $checks[] = $this->unpublishedCheck($shop);
         $checks[] = $this->schedulerCheck();
         $checks[] = $this->stuckRunsCheck($shop);
+        $checks[] = $this->staleWaitingCheck($shop);
+        $checks[] = $this->ambiguousRepliesCheck($shop);
         $checks[] = $this->failedRunsCheck($shop);
         $checks[] = $this->webhookErrorCheck($shop);
         $checks[] = $this->abandonedCheckoutCheck($shop);
@@ -214,6 +216,38 @@ class SetupHealth
             return $this->check('ok', 'No stuck automation runs', 'Queued runs are being picked up by the worker.');
         }
         return $this->check('error', $stuck.' automation run(s) stuck queued/running for over 15 minutes', 'The database queue worker is likely not running. Start php artisan queue:work.', ['label' => 'Run history', 'route' => 'executions.index']);
+    }
+
+    private function staleWaitingCheck(\App\Models\Shop $shop): array
+    {
+        $stale = 0;
+        foreach ($shop->executions()->where('status', 'waiting')->with('version')->limit(200)->get() as $execution) {
+            $node = collect($execution->version->graph['nodes'] ?? [])->firstWhere('id', $execution->current_node_id);
+            $timeoutMinutes = (int) ($node['config']['timeout_minutes'] ?? 120);
+            if ($execution->updated_at->lt(now()->subMinutes($timeoutMinutes + 10))) {
+                $stale++;
+            }
+        }
+        if ($stale === 0) {
+            return $this->check('ok', 'No overdue reply waits', 'Waiting automations are still inside their configured reply timeout.');
+        }
+        return $this->check('warn', $stale.' automation(s) waiting for a reply past their timeout', 'The delayed timeout job was likely lost (queue flush/worker downtime). Restart the queue worker; new runs recover automatically, and these runs can be retried from run history.', ['label' => 'Run history', 'route' => 'executions.index']);
+    }
+
+    private function ambiguousRepliesCheck(\App\Models\Shop $shop): array
+    {
+        $duplicates = (int) $shop->executions()
+            ->where('status', 'waiting')
+            ->whereNotNull('customer_phone_hash')
+            ->selectRaw('customer_phone_hash, COUNT(*) AS aggregate')
+            ->groupBy('customer_phone_hash')
+            ->havingRaw('COUNT(*) > 1')
+            ->get()
+            ->count();
+        if ($duplicates === 0) {
+            return $this->check('ok', 'No ambiguous customer replies', 'Each waiting automation maps to a unique customer conversation.');
+        }
+        return $this->check('warn', $duplicates.' customer(s) have multiple automations waiting on a reply', 'Inbound WhatsApp replies are routed only when exactly one run is waiting for a phone; with several, replies cannot be matched and the runs time out. Consolidate reply-waiting steps or pause duplicate automations.', ['label' => 'Open automations', 'route' => 'automations.index']);
     }
 
     private function failedRunsCheck(\App\Models\Shop $shop): array

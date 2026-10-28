@@ -318,4 +318,80 @@ class PresetAndHealthTest extends TestCase
             ->assertSee('ORDERS CREATE')
             ->assertSee('Processed');
     }
+
+    public function test_builder_exposes_connected_whatsapp_sender_accounts(): void
+    {
+        Http::fake([
+            '*whatify.in*/whatsapp-accounts' => Http::response(['success' => true, 'whatsapp_accounts' => [
+                ['id' => 501, 'display_name' => 'Sales Line', 'phone_number' => '+919876543210', 'status' => 'connected'],
+            ]], 200),
+            '*whatify.in*/templates' => Http::response(['success' => true, 'templates' => []], 200),
+        ]);
+        $shop = $this->shop(true);
+        $workflow = $shop->workflows()->create(['name' => 'W', 'draft_graph' => ['nodes' => [], 'edges' => []]]);
+        $this->withSession(['shop_id' => $shop->id])
+            ->get(route('automations.edit', $workflow))
+            ->assertOk()
+            ->assertSee('Sales Line')
+            ->assertSee('WhatsApp sender account');
+    }
+
+    public function test_draft_save_persists_whatsapp_account_id_including_numeric_strings(): void
+    {
+        $shop = $this->shop();
+        $workflow = $shop->workflows()->create(['name' => 'W', 'draft_graph' => ['nodes' => [], 'edges' => []]]);
+        $graph = ['nodes' => [
+            ['id' => 't', 'type' => 'trigger', 'title' => 'Order', 'x' => 0, 'y' => 0, 'config' => ['topic' => 'ORDERS_CREATE']],
+            ['id' => 's', 'type' => 'send_template', 'title' => 'Send', 'x' => 0, 'y' => 1, 'config' => ['template_name' => 'tpl', 'whatsapp_account_id' => '501']],
+        ], 'edges' => []];
+        $this->withSession(['shop_id' => $shop->id])
+            ->putJson(route('automations.update', $workflow), ['name' => 'W', 'graph' => $graph])
+            ->assertOk();
+        $this->assertSame(501, $workflow->fresh()->draft_graph['nodes'][1]['config']['whatsapp_account_id']);
+    }
+
+    public function test_app_registers_the_custom_pagination_view(): void
+    {
+        $this->assertSame('vendor.pagination.default', \Illuminate\Pagination\AbstractPaginator::$defaultView);
+        $this->assertViewExists('vendor.pagination.default');
+    }
+
+    public function test_health_flags_waiting_runs_past_their_reply_timeout(): void
+    {
+        $shop = $this->shop();
+        $workflow = $shop->workflows()->create(['name' => 'Wait']);
+        $version = WorkflowVersion::create(['workflow_id' => $workflow->id, 'version' => 1, 'published_at' => now(), 'graph' => [
+            'nodes' => [['id' => 'wait', 'type' => 'wait_for_reply', 'title' => 'Wait', 'config' => ['timeout_minutes' => 30]]],
+            'edges' => [],
+        ]]);
+        $execution = \App\Models\WorkflowExecution::create(['shop_id' => $shop->id, 'workflow_id' => $workflow->id, 'workflow_version_id' => $version->id, 'trigger_topic' => 'ORDERS_CREATE', 'customer_phone_hash' => 'h1', 'trigger_payload' => [], 'current_node_id' => 'wait', 'status' => 'waiting']);
+        \Illuminate\Support\Facades\DB::table('workflow_executions')->where('id', $execution->id)->update(['created_at' => now()->subHours(3), 'updated_at' => now()->subHours(2)]);
+
+        $health = app(SetupHealth::class)->build($shop);
+        $check = collect($health['checks'])->first(fn ($c) => str_contains($c['title'], 'past their timeout'));
+        $this->assertNotNull($check);
+        $this->assertSame('warn', $check['level']);
+    }
+
+    public function test_health_flags_a_phone_with_multiple_waiting_automations(): void
+    {
+        $shop = $this->shop();
+        foreach (range(1, 2) as $i) {
+            $workflow = $shop->workflows()->create(['name' => 'Wait '.$i]);
+            $version = WorkflowVersion::create(['workflow_id' => $workflow->id, 'version' => 1, 'published_at' => now(), 'graph' => [
+                'nodes' => [['id' => 'wait', 'type' => 'wait_for_reply', 'title' => 'Wait', 'config' => ['timeout_minutes' => 120]]],
+                'edges' => [],
+            ]]);
+            \App\Models\WorkflowExecution::create(['shop_id' => $shop->id, 'workflow_id' => $workflow->id, 'workflow_version_id' => $version->id, 'trigger_topic' => 'ORDERS_CREATE', 'customer_phone_hash' => 'same-hash', 'trigger_payload' => [], 'current_node_id' => 'wait', 'status' => 'waiting']);
+        }
+        $health = app(SetupHealth::class)->build($shop);
+        $check = collect($health['checks'])->first(fn ($c) => str_contains($c['title'], 'multiple automations waiting'));
+        $this->assertNotNull($check);
+        $this->assertSame('warn', $check['level']);
+    }
+
+    private function assertViewExists(string $view): void
+    {
+        $this->assertTrue(view()->exists($view), "View [$view] should exist.");
+    }
 }
