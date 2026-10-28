@@ -1,7 +1,7 @@
 # Deploy with Shopify CLI after linking a Partner Dashboard app.
 # Replace the client ID and public URL before linking/deploying.
 name = "Whatify Flow"
-client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"
+client_id = "19b2612b5d9d9d0c731edc823a1bbda7"
 application_url = "https://waflow.whatify.in"
 embedded = false
 

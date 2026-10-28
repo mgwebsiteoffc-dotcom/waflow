@@ -1,0 +1,18 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "19b2612b5d9d9d0c731edc823a1bbda7"
+application_url = "https://waflow.whatify.in"
+embedded = false
+name = "Whatify Flow"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_orders,write_orders"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://waflow.whatify.in/integrations/shopify/callback" ]
+
+[webhooks]
+api_version = "2026-10"
