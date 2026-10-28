@@ -110,6 +110,9 @@ class SetupHealth
         if ($probe['ok']) {
             return $this->check('ok', 'Protected customer data (Order object) approved', 'The app can read orders through the GraphQL Admin API.');
         }
+        if (($probe['scope'] ?? false)) {
+            return $this->check('error', 'Shopify API access scope missing', 'The installed token is missing a required scope (usually read_customers). Update [access_scopes] in shopify.app.toml, run shopify app config link && shopify app deploy, then reinstall the app so a token with the new scope is granted.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
+        }
         $detail = ($probe['protected'] ?? false)
             ? 'Shopify blocks Order access until protected customer data is approved. Complete App setup → Protected customer data in Partner Dashboard and submit for approval; development stores work immediately after redeploying the app config.'
             : 'Order probe failed: '.($probe['error'] ?? 'unknown error');

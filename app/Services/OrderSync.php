@@ -44,7 +44,7 @@ class OrderSync
             }
             GRAPHQL, ['first' => $limit]);
         } catch (\Throwable $e) {
-            throw new RuntimeException($this->protectedDataMessage($e), 0, $e);
+            throw new RuntimeException($this->translateOrderError($e), 0, $e);
         }
 
         $edges = $data['orders']['edges'] ?? [];
@@ -85,7 +85,7 @@ class OrderSync
      * Order object. Cached for five minutes; the lightweight shop query used
      * by testConnection passes even when Order access is blocked.
      *
-     * @return array{ok: bool, error: ?string, protected?: bool}
+     * @return array{ok: bool, error: ?string, protected?: bool, scope?: bool}
      */
     public function protectedDataAccess(Shop $shop): array
     {
@@ -95,10 +95,12 @@ class OrderSync
                 return ['ok' => true, 'error' => null];
             } catch (\Throwable $e) {
                 $protected = $this->isProtectedDataError($e);
+                $scope = $this->isMissingScopeError($e);
                 return [
                     'ok' => false,
-                    'error' => $protected ? $this->protectedDataMessage($e) : mb_substr($e->getMessage(), 0, 300),
+                    'error' => $this->translateOrderError($e),
                     'protected' => $protected,
+                    'scope' => $scope,
                 ];
             }
         });
@@ -109,6 +111,37 @@ class OrderSync
         $message = $e->getMessage();
         return str_contains($message, 'not approved to access the Order object')
             || str_contains($message, 'protected customer data');
+    }
+
+    public function isMissingScopeError(\Throwable $e): bool
+    {
+        $message = $e->getMessage();
+        return str_contains($message, 'Required access:')
+            || str_contains($message, 'access scope')
+            || str_contains($message, 'Access denied for customer field');
+    }
+
+    public function translateOrderError(\Throwable $e): string
+    {
+        if ($this->isMissingScopeError($e)) {
+            return $this->scopeErrorMessage($e);
+        }
+        if ($this->isProtectedDataError($e)) {
+            return $this->protectedDataMessage($e);
+        }
+        return $e->getMessage();
+    }
+
+    public function scopeErrorMessage(\Throwable $e): string
+    {
+        if (!$this->isMissingScopeError($e)) {
+            return $e->getMessage();
+        }
+        return 'Shopify rejected the request because the installed app is missing an API access scope. '
+            .'Fix: open shopify.app.toml and make sure [access_scopes] lists read_orders, write_orders and read_customers, then run shopify app config link && shopify app deploy. '
+            .'Then uninstall and reinstall the app in Shopify admin so the access token is granted with the new scope. '
+            .'Customer name and phone are protected customer data: the Protected customer data declaration in Partner Dashboard must also be approved. '
+            .'Reference: https://shopify.dev/docs/api/usage/access-scopes. Raw Shopify error: '.$e->getMessage();
     }
 
     public function protectedDataMessage(\Throwable $e): string

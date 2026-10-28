@@ -6,7 +6,7 @@ application_url = "https://waflow.whatify.in"
 embedded = false
 
 [access_scopes]
-scopes = "read_orders,write_orders"
+scopes = "read_orders,write_orders,read_customers"
 
 [auth]
 redirect_urls = ["https://waflow.whatify.in/integrations/shopify/callback"]
