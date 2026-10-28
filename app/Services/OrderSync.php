@@ -85,7 +85,7 @@ class OrderSync
      * Order object. Cached for five minutes; the lightweight shop query used
      * by testConnection passes even when Order access is blocked.
      *
-     * @return array{ok: bool, error: ?string, protected?: bool, scope?: bool}
+     * @return array{ok: bool, error: ?string, protected?: bool, scope?: bool, auth?: bool}
      */
     public function protectedDataAccess(Shop $shop): array
     {
@@ -94,13 +94,12 @@ class OrderSync
                 $this->admin->request($shop, 'query { orders(first: 1) { edges { node { id } } } }');
                 return ['ok' => true, 'error' => null];
             } catch (\Throwable $e) {
-                $protected = $this->isProtectedDataError($e);
-                $scope = $this->isMissingScopeError($e);
                 return [
                     'ok' => false,
                     'error' => $this->translateOrderError($e),
-                    'protected' => $protected,
-                    'scope' => $scope,
+                    'protected' => $this->isProtectedDataError($e),
+                    'scope' => $this->isMissingScopeError($e),
+                    'auth' => $this->isAuthError($e),
                 ];
             }
         });
@@ -121,15 +120,59 @@ class OrderSync
             || str_contains($message, 'Access denied for customer field');
     }
 
+    public function isAuthError(\Throwable $e): bool
+    {
+        return self::classifySyncError($e->getMessage()) === 'auth';
+    }
+
+    /**
+     * Single classification used by both the API layer and the Orders page panel.
+     * Returns one of: scope, auth, protected, other.
+     */
+    public static function classifySyncError(string $message): string
+    {
+        if (str_contains($message, 'Required access:')
+            || str_contains($message, 'access scope')
+            || str_contains($message, 'Access denied for customer field')) {
+            return 'scope';
+        }
+        if (str_contains($message, 'offline-token refresh failed')
+            || str_contains($message, 'credentials cannot be refreshed')
+            || str_contains($message, 'refresh token has expired')
+            || str_contains($message, 'no active access token')
+            || str_contains($message, 'Re-authorize')) {
+            return 'auth';
+        }
+        if (str_contains($message, 'not approved to access the Order object')
+            || str_contains($message, 'protected customer data')) {
+            return 'protected';
+        }
+        return 'other';
+    }
+
     public function translateOrderError(\Throwable $e): string
     {
         if ($this->isMissingScopeError($e)) {
             return $this->scopeErrorMessage($e);
         }
+        if ($this->isAuthError($e)) {
+            return $this->authErrorMessage($e);
+        }
         if ($this->isProtectedDataError($e)) {
             return $this->protectedDataMessage($e);
         }
         return $e->getMessage();
+    }
+
+    public function authErrorMessage(\Throwable $e): string
+    {
+        if (!$this->isAuthError($e)) {
+            return $e->getMessage();
+        }
+        return 'Shopify rejected the stored app credentials: the access token expired and the refresh token was revoked or is no longer valid. '
+            .'Fix: open the Integrations page and run the Shopify connect flow again (or open /integrations/shopify/install?shop=your-store.myshopify.com) to store a fresh access and refresh token, then run Sync recent orders. '
+            .'If more than one server or database shares this app installation, only the newest refresh token is valid — re-authorize from the live server and remove stale copies. '
+            .'Re-authorize the app if the refresh token has expired or been revoked. Raw Shopify error: '.$e->getMessage();
     }
 
     public function scopeErrorMessage(\Throwable $e): string

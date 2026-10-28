@@ -11,18 +11,27 @@
 <div class="topbar"><div><div class="eyebrow">Workspace / Orders</div><h1 class="page-title">Order verification</h1><p class="subtitle">Review COD confirmation and explainable risk signals received from Shopify.</p></div><div class="top-actions"><form method="POST" action="{{ route('orders.sync') }}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…'">@csrf<button class="secondary">⟳ Sync recent orders</button></form><a class="secondary" href="{{ route('webhooks.index') }}" style="text-decoration:none">Webhook events</a><span class="datepill">{{ $orders->total() }} tracked orders</span></div></div>
 
 @if(!empty($syncError))
-@php($isScopeError = str_contains($syncError, 'access scope') || str_contains($syncError, 'Required access:'))
+@php($errorKind = \App\Services\OrderSync::classifySyncError($syncError))
+@php($panelTitles = ['scope' => 'Shopify blocked order access — missing API access scope', 'auth' => 'Shopify sign-in expired — re-authorize the app', 'protected' => 'Shopify blocked order access — protected customer data approval required', 'other' => 'Shopify order sync failed'])
 <div class="panel" style="margin-bottom:16px;border-color:#f5dcdb;background:#fff7f6">
- <div class="panelhead"><div><div class="paneltitle" style="color:#bf6664">{{ $isScopeError ? 'Shopify blocked order access — missing API access scope' : 'Shopify blocked order access — protected customer data approval required' }}</div><div class="panelhint">The last order sync failed. This is a Shopify-side permission gate, not a connection failure.</div></div><span class="badge b-red">Action required</span></div>
- @if($isScopeError)
+ <div class="panelhead"><div><div class="paneltitle" style="color:#bf6664">{{ $panelTitles[$errorKind] }}</div><div class="panelhint">The last order sync failed. This is a Shopify-side permission or credential gate, not a connection failure.</div></div><span class="badge b-red">Action required</span></div>
+ @if($errorKind === 'scope')
  <ul class="diag-list">
-  <li><strong>1.</strong> Open <code>shopify.app.toml</code> in the app and make sure <code>[access_scopes]</code> lists <code>read_orders, write_orders, read_customers</code> (customer name and phone need <strong>read_customers</strong>).</li>
-  <li><strong>2.</strong> Deploy the updated config: run <code>shopify app config link</code> then <code>shopify app deploy</code>.</li>
+  <li><strong>1.</strong> On the server, check <code>.env</code>: <code>SHOPIFY_SCOPES</code> must be <code>read_orders,write_orders,read_customers</code> (customer name and phone need <strong>read_customers</strong>), then run <code>php artisan config:clear</code>.</li>
+  <li><strong>2.</strong> Make sure <code>shopify.app.toml</code> lists the same scopes, then run <code>shopify app config link</code> and <code>shopify app deploy</code>.</li>
   <li><strong>3.</strong> In Shopify admin, <strong>uninstall the app and install it again</strong> — a fresh install is the only way the access token receives the new scope.</li>
   <li><strong>4.</strong> Because customer data is protected, also complete <strong>Partner Dashboard → App setup → Protected customer data</strong> and submit for approval, then run <strong>Sync recent orders</strong> again.</li>
  </ul>
  <div class="notice" style="margin-bottom:0;background:#fff0ef;border-color:#f5dcdb"><span style="color:#bf6664">!</span><p style="color:#7a5554">Reference: <a href="https://shopify.dev/docs/api/usage/access-scopes" target="_blank" rel="noopener">shopify.dev/docs/api/usage/access-scopes</a> · Details: {{ $syncError }}</p></div>
- @else
+ @elseif($errorKind === 'auth')
+ <ul class="diag-list">
+  <li><strong>1.</strong> The stored access token expired and Shopify rejected its refresh (401) — usually because the app was uninstalled/reinstalled, or another server refreshed the same token first.</li>
+  <li><strong>2.</strong> Re-connect now: <a class="secondary" style="display:inline-block;padding:4px 12px" href="{{ route('integrations.shopify.install', ['shop' => $shop->shop_domain]) }}">Re-authorize Shopify</a> — this stores a brand-new access and refresh token.</li>
+  <li><strong>3.</strong> If you run staging and production against the same store, re-authorize only on the live server and remove the old token copies; Shopify keeps only the newest refresh token valid.</li>
+  <li><strong>4.</strong> After re-authorizing, run <strong>Sync recent orders</strong> again.</li>
+ </ul>
+ <div class="notice" style="margin-bottom:0;background:#fff0ef;border-color:#f5dcdb"><span style="color:#bf6664">!</span><p style="color:#7a5554">Details: {{ $syncError }}</p></div>
+ @elseif($errorKind === 'protected')
  <ul class="diag-list">
   <li><strong>1.</strong> Open <strong>Partner Dashboard → your app → App setup → Protected customer data</strong>, confirm the data types and purposes (orders, customers, checkouts, phone numbers) and save.</li>
   <li><strong>2.</strong> Submit the app for protected-customer-data approval. Until Shopify approves it, live stores cannot read the Order object via API or receive order webhook fields.</li>
@@ -30,6 +39,12 @@
   <li><strong>4.</strong> After approval, reinstall the app so the access token carries the approved scopes, then run <strong>Sync recent orders</strong> again.</li>
  </ul>
  <div class="notice" style="margin-bottom:0;background:#fff0ef;border-color:#f5dcdb"><span style="color:#bf6664">!</span><p style="color:#7a5554">Reference: <a href="https://shopify.dev/docs/apps/launch/protected-customer-data" target="_blank" rel="noopener">shopify.dev/docs/apps/launch/protected-customer-data</a> · Details: {{ $syncError }}</p></div>
+ @else
+ <ul class="diag-list">
+  <li>Open the <a href="{{ route('integrations.index') }}">Integrations</a> page and use <strong>Test connection</strong> to confirm the stored Shopify credentials work.</li>
+  <li>If the error persists, re-authorize the app and run <strong>Sync recent orders</strong> again.</li>
+ </ul>
+ <div class="notice" style="margin-bottom:0;background:#fff0ef;border-color:#f5dcdb"><span style="color:#bf6664">!</span><p style="color:#7a5554">Details: {{ $syncError }}</p></div>
  @endif
 </div>
 @endif

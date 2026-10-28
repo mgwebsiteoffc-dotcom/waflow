@@ -110,6 +110,9 @@ class SetupHealth
         if ($probe['ok']) {
             return $this->check('ok', 'Protected customer data (Order object) approved', 'The app can read orders through the GraphQL Admin API.');
         }
+        if (($probe['auth'] ?? false)) {
+            return $this->check('error', 'Shopify credentials need re-authorization', 'The access token expired and the refresh token was rejected (401). Re-run the Shopify connect flow on the Integrations page to store a fresh token, then sync again.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
+        }
         if (($probe['scope'] ?? false)) {
             return $this->check('error', 'Shopify API access scope missing', 'The installed token is missing a required scope (usually read_customers). Update [access_scopes] in shopify.app.toml, run shopify app config link && shopify app deploy, then reinstall the app so a token with the new scope is granted.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
         }
