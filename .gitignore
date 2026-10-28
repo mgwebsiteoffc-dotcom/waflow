@@ -18,3 +18,5 @@
 !/bootstrap/cache/.gitignore
 .phpunit.cache
 .DS_Store
+/storage/framework/testing
+/storage/app/public/widget

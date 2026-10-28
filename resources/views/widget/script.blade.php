@@ -1,5 +1,5 @@
 {{-- Public storefront widget. Served as JavaScript. $config contains only non-secret display settings. --}}
-window.__WF_CONFIG__ = @json($config);
+window.__WF_CONFIG__ = {!! json_encode($config, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) !!};
 @verbatim
 (function () {
  'use strict';
@@ -8,7 +8,32 @@ window.__WF_CONFIG__ = @json($config);
  var scriptSrc = (document.currentScript && document.currentScript.src) || '';
  var base = scriptSrc ? scriptSrc.replace(/\/widget\.js(\?.*)?$/, '') : '';
  var endpoint = base + '/capture';
- var openKind = null, entryShown = false, exitShown = false, maxScroll = 0;
+ var openKind = null, entryShown = false, exitShown = false, maxScroll = 0, visits = 1;
+
+ function visitCount() {
+  var n;
+  try {
+   n = (parseInt(window.localStorage.getItem('wf_visits') || '0', 10) || 0) + 1;
+   window.localStorage.setItem('wf_visits', String(n));
+  } catch (e) {
+   n = (parseInt(cookieGet('wf_visits') || '0', 10) || 0) + 1;
+   document.cookie = 'wf_visits=' + n + '; path=/; max-age=31536000; samesite=lax';
+  }
+  return n;
+ }
+ function pageMatches(cfg) {
+  var rule = cfg.pages || 'all';
+  if (rule === 'all') return true;
+  var path = window.location.pathname || '/';
+  if (rule === 'home') return path === '/' || path === '';
+  var rules = Array.isArray(cfg.paths) ? cfg.paths : [];
+  return rules.some(function (p) {
+   if (p.length > 1 && p.charAt(p.length - 1) === '*') {
+    return path.indexOf(p.slice(0, -1)) === 0;
+   }
+   return path === p;
+  });
+ }
 
  function h(tag, attrs, children) {
   var e = document.createElement(tag);
@@ -71,6 +96,8 @@ window.__WF_CONFIG__ = @json($config);
  function showModal(kind) {
   if (openKind) return;
   var cfg = kind === 'entry' ? C.entry : C.exit;
+  if (!pageMatches(cfg)) return;
+  if (visits < (parseInt(cfg.showAfterVisits, 10) || 1)) return;
   var cookieName = kind === 'entry' ? 'wf_entry_seen' : 'wf_exit_seen';
   if (recentlySeen(cookieName, cfg.frequencyDays)) return;
   markSeen(cookieName, cfg.frequencyDays);
@@ -90,13 +117,18 @@ window.__WF_CONFIG__ = @json($config);
   });
   var closeBtn = h('button', { class: 'wf-close', type: 'button', 'aria-label': 'Close', text: '×' });
   closeBtn.addEventListener('click', closeModal);
-  var card = h('div', { class: 'wf-card', role: 'dialog', 'aria-modal': 'true' }, [
-   closeBtn,
-   h('div', { class: 'wf-badge', text: 'WhatsApp' }),
+  var children = [closeBtn, h('div', { class: 'wf-badge', text: 'WhatsApp' })];
+  if (cfg.image) {
+   var img = h('img', { class: 'wf-image', src: cfg.image, alt: '', loading: 'lazy' });
+   img.onerror = function () { img.remove(); };
+   children.push(img);
+  }
+  children.push(
    h('h2', { class: 'wf-title', text: cfg.title || '' }),
    h('p', { class: 'wf-text', text: cfg.text || '' }),
    form, success
-  ]);
+  );
+  var card = h('div', { class: 'wf-card', role: 'dialog', 'aria-modal': 'true' }, children);
   var overlay = h('div', { class: 'wf-overlay', id: 'wf-overlay' }, [card]);
   overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
   document.addEventListener('keydown', function escClose(e) {
@@ -118,10 +150,11 @@ window.__WF_CONFIG__ = @json($config);
   a.innerHTML = svg;
   document.body.appendChild(a);
  }
- var CSS = '.wf-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(18,16,34,.55);display:flex;align-items:center;justify-content:center;padding:18px;font-family:inherit}.wf-card{position:relative;background:#fff;width:min(430px,100%);border-radius:16px;padding:28px 24px 24px;box-shadow:0 24px 60px rgba(16,12,38,.35);animation:wfpop .22s ease-out}@keyframes wfpop{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}.wf-close{position:absolute;top:10px;right:14px;border:0;background:none;font-size:24px;line-height:1;color:#9b98aa;cursor:pointer}.wf-badge{display:inline-block;background:#e7f7ee;color:#1f8a54;font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;padding:4px 9px;border-radius:20px;margin-bottom:12px}.wf-title{margin:0 0 8px;font-size:20px;font-weight:800;color:#17152c;line-height:1.25}.wf-text{margin:0 0 18px;font-size:13px;color:#716f80;line-height:1.55}.wf-form{display:grid;gap:10px}.wf-input{width:100%;border:1px solid #e3e1ec;border-radius:10px;padding:12px 13px;font-size:13px;outline:none;color:#2a2740}.wf-input:focus{border-color:#8f73ee;box-shadow:0 0 0 3px rgba(112,68,232,.12)}.wf-submit{width:100%;border:0;border-radius:10px;padding:13px;background:#7044e8;color:#fff;font-size:13px;font-weight:700;cursor:pointer}.wf-submit:disabled{opacity:.65;cursor:default}.wf-error{background:#fff0ef;color:#ad5654;border:1px solid #f5dcdb;border-radius:9px;padding:9px 11px;font-size:11.5px}.wf-success{background:#eaf8f0;color:#267b50;border:1px solid #d6f1e1;border-radius:9px;padding:12px;font-size:12.5px;font-weight:600;text-align:center}.wf-fab{position:fixed;bottom:22px;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(16,12,38,.28);z-index:2147483599;text-decoration:none;animation:wffab .25s ease-out}@keyframes wffab{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}.wf-fab.right{right:22px}.wf-fab.left{left:22px}.wf-fab:hover{filter:brightness(1.06)}@media(max-width:560px){.wf-fab{bottom:16px;width:50px;height:50px}.wf-fab.right{right:16px}.wf-fab.left{left:16px}.wf-card{padding:24px 18px 20px}}';
+ var CSS = '.wf-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(18,16,34,.55);display:flex;align-items:center;justify-content:center;padding:18px;font-family:inherit}.wf-card{position:relative;background:#fff;width:min(430px,100%);border-radius:16px;padding:28px 24px 24px;box-shadow:0 24px 60px rgba(16,12,38,.35);animation:wfpop .22s ease-out}@keyframes wfpop{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}.wf-close{position:absolute;top:10px;right:14px;border:0;background:none;font-size:24px;line-height:1;color:#9b98aa;cursor:pointer}.wf-badge{display:inline-block;background:#e7f7ee;color:#1f8a54;font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;padding:4px 9px;border-radius:20px;margin-bottom:12px}.wf-image{width:calc(100% + 48px);margin:-28px -24px 16px;max-height:190px;object-fit:cover;border-radius:16px 16px 0 0;display:block}.wf-title{margin:0 0 8px;font-size:20px;font-weight:800;color:#17152c;line-height:1.25}.wf-text{margin:0 0 18px;font-size:13px;color:#716f80;line-height:1.55}.wf-form{display:grid;gap:10px}.wf-input{width:100%;border:1px solid #e3e1ec;border-radius:10px;padding:12px 13px;font-size:13px;outline:none;color:#2a2740}.wf-input:focus{border-color:#8f73ee;box-shadow:0 0 0 3px rgba(112,68,232,.12)}.wf-submit{width:100%;border:0;border-radius:10px;padding:13px;background:#7044e8;color:#fff;font-size:13px;font-weight:700;cursor:pointer}.wf-submit:disabled{opacity:.65;cursor:default}.wf-error{background:#fff0ef;color:#ad5654;border:1px solid #f5dcdb;border-radius:9px;padding:9px 11px;font-size:11.5px}.wf-success{background:#eaf8f0;color:#267b50;border:1px solid #d6f1e1;border-radius:9px;padding:12px;font-size:12.5px;font-weight:600;text-align:center}.wf-fab{position:fixed;bottom:22px;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(16,12,38,.28);z-index:2147483599;text-decoration:none;animation:wffab .25s ease-out}@keyframes wffab{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}.wf-fab.right{right:22px}.wf-fab.left{left:22px}.wf-fab:hover{filter:brightness(1.06)}@media(max-width:560px){.wf-fab{bottom:16px;width:50px;height:50px}.wf-fab.right{right:16px}.wf-fab.left{left:16px}.wf-card{padding:24px 18px 20px}.wf-image{width:calc(100% + 36px);margin:-24px -18px 14px}}';
 
  function init() {
   if (!document.body) return;
+  visits = visitCount();
   document.documentElement.appendChild(h('style', { text: CSS }));
   mountFab();
   if (C.entry && C.entry.enabled) {

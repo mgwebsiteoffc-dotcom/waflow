@@ -6,4 +6,5 @@ Route::post('/webhooks/shopify',[ApiWebhookController::class,'shopify'])->middle
 Route::post('/webhooks/whatify/inbound',[ApiWebhookController::class,'whatify'])->middleware('throttle:300,1')->name('webhooks.whatify');
 // Public storefront widget: no session, identified by the shop domain in the URL.
 Route::get('/widget/{shopDomain}/widget.js',[WidgetController::class,'script'])->middleware('throttle:120,1')->name('widget.script');
+Route::get('/widget/{shopDomain}/image/{path}',[WidgetController::class,'image'])->where('path','[A-Za-z0-9._/-]+')->middleware('throttle:120,1')->name('widget.image');
 Route::post('/widget/{shopDomain}/capture',[WidgetController::class,'capture'])->middleware('throttle:30,1')->name('widget.capture');

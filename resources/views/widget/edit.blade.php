@@ -11,6 +11,12 @@
 .lead-src{font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px}
 .lead-src.entry{background:#eaf2ff;color:#4778ba}.lead-src.exit{background:#fff1df;color:#a76a1c}
 .hint-list{margin:8px 0 0;padding-left:16px;color:#8d8c9c;font-size:11px;line-height:1.7}
+.img-preview{display:flex;align-items:center;gap:12px;margin-top:8px}
+.img-preview img{width:96px;height:64px;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:#faf9fd}
+.img-preview label{font-size:11px;color:#ad5654;font-weight:700;display:flex;gap:5px;align-items:center;cursor:pointer}
+.paths-box{display:none}
+.paths-box.show{display:block}
+.paths-box textarea{min-height:84px;font-family:monospace}
 @media(max-width:860px){.widget-grid{grid-template-columns:1fr}}
 </style>@endpush
 @section('content')
@@ -28,7 +34,7 @@
   </ul>
  </div>
 
- <form method="POST" action="{{ route('widget.update') }}">
+ <form method="POST" action="{{ route('widget.update') }}" enctype="multipart/form-data">
   @csrf
   @method('PUT')
   <div class="widget-wrap">
@@ -40,8 +46,22 @@
      <div><label class="configlabel">Popup title</label><input class="field" name="entry_title" maxlength="150" value="{{ old('entry_title',$setting->entry_title) }}"></div>
      <div><label class="configlabel">Button label</label><input class="field" name="entry_button_label" maxlength="60" value="{{ old('entry_button_label',$setting->entry_button_label) }}"></div>
      <div class="full"><label class="configlabel">Message</label><textarea class="field textarea" name="entry_text" maxlength="500">{{ old('entry_text',$setting->entry_text) }}</textarea></div>
-     <div><label class="configlabel">Show after (seconds)</label><input class="field" type="number" min="0" max="300" name="entry_delay_seconds" value="{{ old('entry_delay_seconds',$setting->entry_delay_seconds) }}"></div>
+     <div><label class="configlabel">Show after (seconds on page)</label><input class="field" type="number" min="0" max="300" name="entry_delay_seconds" value="{{ old('entry_delay_seconds',$setting->entry_delay_seconds) }}"></div>
+     <div><label class="configlabel">Show only after this many visits</label><input class="field" type="number" min="1" max="50" name="entry_show_after_visits" value="{{ old('entry_show_after_visits',$setting->entry_show_after_visits) }}"></div>
      <div><label class="configlabel">Show again after (days, 0 = once per browser session)</label><input class="field" type="number" min="0" max="90" name="entry_frequency_days" value="{{ old('entry_frequency_days',$setting->entry_frequency_days) }}"></div>
+     <div><label class="configlabel">Show on which pages</label>
+      <select class="field" name="entry_pages" onchange="togglePaths(this)"><option value="all" @selected($setting->entry_pages==='all')>All pages</option><option value="home" @selected($setting->entry_pages==='home')>Home page only</option><option value="custom" @selected($setting->entry_pages==='custom')>Specific pages only</option></select></div>
+     <div class="full paths-box {{ $setting->entry_pages==='custom'?'show':'' }}" data-paths-for="entry">
+      <label class="configlabel">Page paths — one per line (supports * wildcard, e.g. <code>/collections/*</code>, <code>/products/ring</code>)</label>
+      <textarea class="field textarea" name="entry_paths" placeholder="/collections/*&#10;/pages/about">{{ old('entry_paths',$setting->entry_paths) }}</textarea>
+     </div>
+     <div class="full">
+      <label class="configlabel">Popup image (optional, JPG/PNG/WebP/GIF, max 2 MB)</label>
+      <input class="field" type="file" name="entry_image" accept="image/jpeg,image/png,image/webp,image/gif" style="padding:7px">
+      @if($entryImageUrl)
+       <div class="img-preview"><img src="{{ $entryImageUrl }}" alt="Entry popup image"><label><input type="checkbox" name="entry_image_remove" value="1"> Remove current image</label></div>
+      @endif
+     </div>
     </div>
    </div>
 
@@ -52,7 +72,21 @@
      <div><label class="configlabel">Popup title</label><input class="field" name="exit_title" maxlength="150" value="{{ old('exit_title',$setting->exit_title) }}"></div>
      <div><label class="configlabel">Button label</label><input class="field" name="exit_button_label" maxlength="60" value="{{ old('exit_button_label',$setting->exit_button_label) }}"></div>
      <div class="full"><label class="configlabel">Message</label><textarea class="field textarea" name="exit_text" maxlength="500">{{ old('exit_text',$setting->exit_text) }}</textarea></div>
+     <div><label class="configlabel">Show only after this many visits</label><input class="field" type="number" min="1" max="50" name="exit_show_after_visits" value="{{ old('exit_show_after_visits',$setting->exit_show_after_visits) }}"></div>
      <div><label class="configlabel">Show again after (days, 0 = once per browser session)</label><input class="field" type="number" min="0" max="90" name="exit_frequency_days" value="{{ old('exit_frequency_days',$setting->exit_frequency_days) }}"></div>
+     <div><label class="configlabel">Show on which pages</label>
+      <select class="field" name="exit_pages" onchange="togglePaths(this)"><option value="all" @selected($setting->exit_pages==='all')>All pages</option><option value="home" @selected($setting->exit_pages==='home')>Home page only</option><option value="custom" @selected($setting->exit_pages==='custom')>Specific pages only</option></select></div>
+     <div class="full paths-box {{ $setting->exit_pages==='custom'?'show':'' }}" data-paths-for="exit">
+      <label class="configlabel">Page paths — one per line (supports * wildcard, e.g. <code>/collections/*</code>, <code>/products/ring</code>)</label>
+      <textarea class="field textarea" name="exit_paths" placeholder="/collections/*&#10;/pages/about">{{ old('exit_paths',$setting->exit_paths) }}</textarea>
+     </div>
+     <div class="full">
+      <label class="configlabel">Popup image (optional, JPG/PNG/WebP/GIF, max 2 MB)</label>
+      <input class="field" type="file" name="exit_image" accept="image/jpeg,image/png,image/webp,image/gif" style="padding:7px">
+      @if($exitImageUrl)
+       <div class="img-preview"><img src="{{ $exitImageUrl }}" alt="Exit popup image"><label><input type="checkbox" name="exit_image_remove" value="1"> Remove current image</label></div>
+      @endif
+     </div>
     </div>
    </div>
 
@@ -95,5 +129,9 @@
 function copySnippet(){
  const input=document.getElementById('snippet');input.select();
  navigator.clipboard.writeText(input.value).then(()=>{const b=document.getElementById('copyBtn');const old=b.textContent;b.textContent='Copied!';setTimeout(()=>b.textContent=old,1600);}).catch(()=>{input.select();document.execCommand('copy');});
+}
+function togglePaths(select){
+ const box=select.closest('.panel').querySelector('.paths-box');
+ if(box) box.classList.toggle('show',select.value==='custom');
 }
 </script>@endpush
