@@ -114,7 +114,7 @@ class SetupHealth
             return $this->check('error', 'Shopify credentials need re-authorization', 'The access token expired and the refresh token was rejected (401). Re-run the Shopify connect flow on the Integrations page to store a fresh token, then sync again.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
         }
         if (($probe['scope'] ?? false)) {
-            return $this->check('error', 'Shopify API access scope missing', 'The installed token is missing a required scope (usually read_customers). Update [access_scopes] in shopify.app.toml, run shopify app config link && shopify app deploy, then reinstall the app so a token with the new scope is granted.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
+            return $this->check('error', 'Shopify API access scope missing', 'The installed token is missing a required scope (read_customers for customer data or read_fulfillments for the shipping webhook). Update [access_scopes] in shopify.app.toml, run shopify app config link && shopify app deploy, then reinstall the app so a token with the new scope is granted.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
         }
         $detail = ($probe['protected'] ?? false)
             ? 'Shopify blocks Order access until protected customer data is approved. Complete App setup → Protected customer data in Partner Dashboard and submit for approval; development stores work immediately after redeploying the app config.'

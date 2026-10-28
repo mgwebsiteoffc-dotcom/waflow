@@ -17,7 +17,7 @@
  <div class="panelhead"><div><div class="paneltitle" style="color:#bf6664">{{ $panelTitles[$errorKind] }}</div><div class="panelhint">The last order sync failed. This is a Shopify-side permission or credential gate, not a connection failure.</div></div><span class="badge b-red">Action required</span></div>
  @if($errorKind === 'scope')
  <ul class="diag-list">
-  <li><strong>1.</strong> On the server, check <code>.env</code>: <code>SHOPIFY_SCOPES</code> must be <code>read_orders,write_orders,read_customers</code> (customer name and phone need <strong>read_customers</strong>), then run <code>php artisan config:clear</code>.</li>
+  <li><strong>1.</strong> On the server, check <code>.env</code>: <code>SHOPIFY_SCOPES</code> must be <code>read_orders,write_orders,read_customers,read_fulfillments</code> (customer data needs <strong>read_customers</strong>; the shipping-update webhook needs <strong>read_fulfillments</strong>), then run <code>php artisan config:clear</code>.</li>
   <li><strong>2.</strong> Make sure <code>shopify.app.toml</code> lists the same scopes, then run <code>shopify app config link</code> and <code>shopify app deploy</code>.</li>
   <li><strong>3.</strong> In Shopify admin, <strong>uninstall the app and install it again</strong> — a fresh install is the only way the access token receives the new scope.</li>
   <li><strong>4.</strong> Because customer data is protected, also complete <strong>Partner Dashboard → App setup → Protected customer data</strong> and submit for approval, then run <strong>Sync recent orders</strong> again.</li>

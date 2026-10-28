@@ -181,7 +181,7 @@ class OrderSync
             return $e->getMessage();
         }
         return 'Shopify rejected the request because the installed app is missing an API access scope. '
-            .'Fix: open shopify.app.toml and make sure [access_scopes] lists read_orders, write_orders and read_customers, then run shopify app config link && shopify app deploy. '
+            .'Fix: open shopify.app.toml and make sure [access_scopes] lists read_orders, write_orders, read_customers and read_fulfillments, then run shopify app config link && shopify app deploy. '
             .'Then uninstall and reinstall the app in Shopify admin so the access token is granted with the new scope. '
             .'Customer name and phone are protected customer data: the Protected customer data declaration in Partner Dashboard must also be approved. '
             .'Reference: https://shopify.dev/docs/api/usage/access-scopes. Raw Shopify error: '.$e->getMessage();
