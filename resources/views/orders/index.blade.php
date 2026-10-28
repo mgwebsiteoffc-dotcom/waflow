@@ -10,6 +10,19 @@
 @section('content')
 <div class="topbar"><div><div class="eyebrow">Workspace / Orders</div><h1 class="page-title">Order verification</h1><p class="subtitle">Review COD confirmation and explainable risk signals received from Shopify.</p></div><div class="top-actions"><form method="POST" action="{{ route('orders.sync') }}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…'">@csrf<button class="secondary">⟳ Sync recent orders</button></form><a class="secondary" href="{{ route('webhooks.index') }}" style="text-decoration:none">Webhook events</a><span class="datepill">{{ $orders->total() }} tracked orders</span></div></div>
 
+@if(!empty($syncError))
+<div class="panel" style="margin-bottom:16px;border-color:#f5dcdb;background:#fff7f6">
+ <div class="panelhead"><div><div class="paneltitle" style="color:#bf6664">Shopify blocked order access — protected customer data approval required</div><div class="panelhint">The last order sync failed. This is a Shopify-side permission gate, not a connection failure.</div></div><span class="badge b-red">Action required</span></div>
+ <ul class="diag-list">
+  <li><strong>1.</strong> Open <strong>Partner Dashboard → your app → App setup → Protected customer data</strong>, confirm the data types and purposes (orders, customers, checkouts, phone numbers) and save.</li>
+  <li><strong>2.</strong> Submit the app for protected-customer-data approval. Until Shopify approves it, live stores cannot read the Order object via API or receive order webhook fields.</li>
+  <li><strong>3.</strong> To test immediately without waiting, install on a <strong>Shopify development store</strong>, then redeploy: <code>shopify app config link</code> and <code>shopify app deploy</code>.</li>
+  <li><strong>4.</strong> After approval, reinstall the app so the access token carries the approved scopes, then run <strong>Sync recent orders</strong> again.</li>
+ </ul>
+ <div class="notice" style="margin-bottom:0;background:#fff0ef;border-color:#f5dcdb"><span style="color:#bf6664">!</span><p style="color:#7a5554">Reference: <a href="https://shopify.dev/docs/apps/launch/protected-customer-data" target="_blank" rel="noopener">shopify.dev/docs/apps/launch/protected-customer-data</a> · Raw error: {{ $syncError }}</p></div>
+</div>
+@endif
+
 @if($orders->total() === 0 && ! request('q'))
 <div class="panel" style="margin-bottom:16px;border-color:#f0e4ff;background:linear-gradient(135deg,#f8f5ff,#fff)">
  <div class="panelhead"><div><div class="paneltitle">Why are no orders showing?</div><div class="panelhint">Orders appear here only after Shopify delivers an <b>orders/create</b> webhook and the queue worker processes it.</div></div></div>
@@ -19,6 +32,7 @@
    <li>Install the app from your Shopify admin and confirm the store shows <b>Connected</b> in <a href="{{ route('integrations.index') }}">Integrations</a>.</li>
    <li>Deploy the Shopify app configuration (<code>shopify app config link</code> then <code>shopify app deploy</code>) so the <code>orders/create</code> webhook subscription is registered.</li>
    <li>Keep <code>php artisan queue:work</code> running — webhooks are processed asynchronously.</li>
+   <li>Confirm <strong>protected customer data</strong> is approved in Partner Dashboard (App setup → Protected customer data) — without it Shopify blocks Order access with a "not approved to access the Order object" error.</li>
    <li>Use <b>Sync recent orders</b> above to backfill existing orders immediately, or place a test order and reload.</li>
   </ul>
  @elseif(! $lastOrderWebhookAt)

@@ -7,6 +7,7 @@ use App\Models\OrderVerification;
 use App\Models\Shop;
 use App\Models\WhatsAppConsent;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 
 /**
@@ -28,7 +29,8 @@ class OrderSync
     public function syncRecentOrders(Shop $shop, int $limit = 25): array
     {
         $limit = max(1, min(50, $limit));
-        $data = $this->admin->request($shop, <<<'GRAPHQL'
+        try {
+            $data = $this->admin->request($shop, <<<'GRAPHQL'
             query RecentOrders($first: Int!) {
               orders(first: $first, sortKey: CREATED_AT, reverse: true) {
                 edges { node {
@@ -41,6 +43,9 @@ class OrderSync
               }
             }
             GRAPHQL, ['first' => $limit]);
+        } catch (\Throwable $e) {
+            throw new RuntimeException($this->protectedDataMessage($e), 0, $e);
+        }
 
         $edges = $data['orders']['edges'] ?? [];
         $synced = 0;
@@ -73,6 +78,48 @@ class OrderSync
             'domain' => $shopNode['myshopifyDomain'] ?? $shop->shop_domain,
             'email' => $shopNode['email'] ?? null,
         ];
+    }
+
+    /**
+     * Probe whether Shopify has approved this app's access to the protected
+     * Order object. Cached for five minutes; the lightweight shop query used
+     * by testConnection passes even when Order access is blocked.
+     *
+     * @return array{ok: bool, error: ?string, protected?: bool}
+     */
+    public function protectedDataAccess(Shop $shop): array
+    {
+        return Cache::remember('shopify.protected_data.'.$shop->id, now()->addMinutes(5), function () use ($shop) {
+            try {
+                $this->admin->request($shop, 'query { orders(first: 1) { edges { node { id } } } }');
+                return ['ok' => true, 'error' => null];
+            } catch (\Throwable $e) {
+                $protected = $this->isProtectedDataError($e);
+                return [
+                    'ok' => false,
+                    'error' => $protected ? $this->protectedDataMessage($e) : mb_substr($e->getMessage(), 0, 300),
+                    'protected' => $protected,
+                ];
+            }
+        });
+    }
+
+    public function isProtectedDataError(\Throwable $e): bool
+    {
+        $message = $e->getMessage();
+        return str_contains($message, 'not approved to access the Order object')
+            || str_contains($message, 'protected customer data');
+    }
+
+    public function protectedDataMessage(\Throwable $e): string
+    {
+        if (!$this->isProtectedDataError($e)) {
+            return $e->getMessage();
+        }
+        return 'Shopify has not approved this app for protected customer data (Order object), so order sync and order webhooks are blocked. '
+            .'Fix in Partner Dashboard: open the app → App setup → Protected customer data → confirm the data types and purposes (orders, customers, checkouts, phone numbers), save, then submit for approval. '
+            .'For immediate testing without approval, install the app on a Shopify development store and redeploy the configuration (shopify app config link && shopify app deploy). '
+            .'After approval, reinstall the app so the access token includes the approved scopes. Reference: https://shopify.dev/docs/apps/launch/protected-customer-data';
     }
 
     /**

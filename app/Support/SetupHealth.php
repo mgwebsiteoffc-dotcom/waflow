@@ -42,6 +42,7 @@ class SetupHealth
         $whatify = $this->whatifySnapshot($shop);
 
         $checks[] = $this->shopifyCheck($shop);
+        $checks[] = $this->protectedDataCheck($shop);
         $checks[] = $this->whatifyCheck($shop, $whatify);
         $checks[] = $this->approvedTemplatesCheck($whatify);
         $checks[] = $this->templateMappingCheck($shop, $whatify);
@@ -94,6 +95,25 @@ class SetupHealth
             return $this->check('ok', 'Shopify store connected', 'Webhooks from '.$shop->shop_domain.' can start automations.');
         }
         return $this->check('error', 'Shopify store not connected', 'Install the app from your Shopify admin so order and checkout events arrive.', ['label' => 'Open integrations', 'route' => 'integrations.index']);
+    }
+
+    private function protectedDataCheck(\App\Models\Shop $shop): array
+    {
+        if (!$shop->installed || !$shop->access_token) {
+            return $this->check('warn', 'Protected customer data not verifiable', 'Connect the Shopify store first; Order object access is checked automatically afterward.');
+        }
+        try {
+            $probe = app(\App\Services\OrderSync::class)->protectedDataAccess($shop);
+        } catch (\Throwable $e) {
+            return $this->check('warn', 'Protected data check unavailable', 'The Order access probe could not run: '.mb_substr($e->getMessage(), 0, 180));
+        }
+        if ($probe['ok']) {
+            return $this->check('ok', 'Protected customer data (Order object) approved', 'The app can read orders through the GraphQL Admin API.');
+        }
+        $detail = ($probe['protected'] ?? false)
+            ? 'Shopify blocks Order access until protected customer data is approved. Complete App setup → Protected customer data in Partner Dashboard and submit for approval; development stores work immediately after redeploying the app config.'
+            : 'Order probe failed: '.($probe['error'] ?? 'unknown error');
+        return $this->check('error', 'Shopify protected customer data not approved', $detail, ['label' => 'Open integrations', 'route' => 'integrations.index']);
     }
 
     private function whatifyCheck(\App\Models\Shop $shop, array $whatify): array
