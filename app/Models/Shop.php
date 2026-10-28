@@ -2,8 +2,8 @@
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Shop extends Model {
- protected $fillable=['shop_domain','access_token','refresh_token','access_token_expires_at','refresh_token_expires_at','whatify_api_key','granted_scopes','installed','settings','installed_at'];
- protected $casts=['access_token'=>'encrypted','refresh_token'=>'encrypted','whatify_api_key'=>'encrypted','access_token_expires_at'=>'datetime','refresh_token_expires_at'=>'datetime','settings'=>'array','installed'=>'boolean','installed_at'=>'datetime'];
+ protected $fillable=['shop_domain','access_token','refresh_token','access_token_expires_at','refresh_token_expires_at','whatify_api_key','granted_scopes','installed','settings','installed_at','billing_status','billing_charge_id','billing_amount','billing_currency','billing_confirmed_at'];
+ protected $casts=['access_token'=>'encrypted','refresh_token'=>'encrypted','whatify_api_key'=>'encrypted','access_token_expires_at'=>'datetime','refresh_token_expires_at'=>'datetime','settings'=>'array','installed'=>'boolean','installed_at'=>'datetime','billing_amount'=>'decimal:2','billing_confirmed_at'=>'datetime'];
  public function workflows(){return $this->hasMany(Workflow::class);}
  public function executions(){return $this->hasMany(WorkflowExecution::class);}
  public function verifications(){return $this->hasMany(OrderVerification::class);}

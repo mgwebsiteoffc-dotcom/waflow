@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrderController;
@@ -18,7 +19,14 @@ Route::post('/integrations/shopify/test', [IntegrationController::class,'testSho
 Route::delete('/integrations/whatify', [IntegrationController::class,'disconnectWhatify'])->middleware('shop.connected')->name('integrations.whatify.disconnect');
 Route::delete('/integrations/shopify', [IntegrationController::class,'disconnectShopify'])->middleware('shop.connected')->name('integrations.shopify.disconnect');
 
+// Billing must stay reachable by unpaid shops, so it sits outside the billing gate.
 Route::middleware('shop.connected')->group(function(){
+ Route::get('/billing',[BillingController::class,'index'])->name('billing.index');
+ Route::post('/billing/start',[BillingController::class,'start'])->middleware('throttle:10,1')->name('billing.start');
+ Route::get('/billing/callback',[BillingController::class,'callback'])->name('billing.callback');
+});
+
+Route::middleware(['shop.connected','shop.billed'])->group(function(){
  Route::get('/automations/presets',[WorkflowController::class,'presets'])->name('automations.presets');
  Route::post('/automations/from-preset',[WorkflowController::class,'fromPreset'])->name('automations.from-preset');
  Route::get('/automations/health',[WorkflowController::class,'health'])->name('automations.health');

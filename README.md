@@ -80,6 +80,16 @@ The checked-in TOML is configured as `embedded = false`, matching the current se
 6. Configure Whatify to POST signed inbound reply events to `/api/webhooks/whatify/inbound`, and set `WHATIFY_WEBHOOK_SECRET` only after confirming Whatify's exact event schema and signature contract. `STOP`, `UNSUBSCRIBE`, `OPT OUT`, `END`, and `QUIT` opt the phone out of both consent purposes, scrub pending recovery data, and cancel queued/running/waiting executions. A stale checkout attribute/order tag cannot reverse STOP; re-opt-in requires an explicit opt-in on a checkout/order created afterward. Other replies route to a unique waiting workflow. The Whatify inbound signing/payload format has not been live-verified.
 7. Use transactional utility content for order notices only—no upsell or promotional material in order templates. Cart recovery is marketing-purpose and requires a marketing template. Monitor template status, quality, limits, and category; Meta review/re-categorization is not guaranteed.
 
+## Shopify billing (one-time charge)
+
+The app implements the Shopify Billing GraphQL API (`appPurchaseOneTimeCreate`) for a single one-time charge — default **$1.00 USD, no subscription**. Configuration lives in `config/services.php` under `shopify.*` and is environment-driven:
+
+- `SHOPIFY_BILLING_ENABLED` (default `true`) — master switch; set `false` to disable gating entirely.
+- `SHOPIFY_BILLING_TEST_MODE` — `true` creates Shopify test charges for development/review stores; must be `false` for production.
+- `SHOPIFY_ONE_TIME_PRICE`, `SHOPIFY_BILLING_CURRENCY`, `SHOPIFY_BILLING_NAME`.
+
+Flow: an unpaid shop is redirected by the `shop.billed` middleware (`EnsureBilled`) to `/billing`; starting payment creates the charge and redirects to Shopify's confirmation screen; the return callback re-queries `oneTimePurchases` and unlocks the app only when a purchase is `ACTIVE`. Charge state is cached for five minutes and persisted on `shops` (`billing_status`, `billing_charge_id`, `billing_amount`, `billing_currency`, `billing_confirmed_at`). The dashboard, integrations and billing pages stay reachable while unpaid so setup can continue; JSON clients receive HTTP 402. Reinstalling a shop starts a fresh charge. The Partner Dashboard pricing plan must be created as a matching one-time $1 USD plan, and `SHOPIFY_BILLING_TEST_MODE=true` must be set while the app is under Shopify review.
+
 ## Website widget — entry/exit popups and floating WhatsApp button
 
 **Website widget** (`/widget`) configures a storefront lead-capture widget per shop. The settings page provides a single copy-paste snippet (`<script defer src="https://APP-URL/api/widget/{shop}.myshopify.com/widget.js"></script>`) for `theme.liquid` or any website; changing settings never requires changing the snippet.
