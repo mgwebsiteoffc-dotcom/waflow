@@ -93,6 +93,64 @@ as a stopgap.
   the Webhook events page in the app first; if Shopify has never delivered,
   there is nothing for the worker to log.
 
+## Shared hosting (cPanel, no root, no Supervisor)
+
+You cannot install Supervisor or systemd services. Use this setup instead:
+
+1. **Switch the queue to synchronous mode** in `.env` — webhook jobs then run
+   inside the incoming request, so no worker daemon is needed:
+   ```
+   QUEUE_CONNECTION=sync
+   ```
+   Run `php artisan config:clear` afterwards.
+2. **Add one cron job** (cPanel → Cron Jobs, every minute) — find the PHP path
+   first with `which php` (commonly `/usr/local/bin/php`):
+   ```
+   * * * * * cd /home/USERNAME/waflow && /usr/local/bin/php artisan schedule:run >> /dev/null 2>&1
+   ```
+   This keeps token rotation, the health heartbeat, cart recovery and pruning
+   alive. No separate queue worker cron is needed with the sync queue.
+3. If you prefer keeping the database queue, add a second cron line instead of
+   step 1 (see `deploy/cron/whatify.cron`):
+   ```
+   * * * * * cd /home/USERNAME/waflow && /usr/local/bin/php artisan queue:work --stop-when-empty --max-time=50 --tries=3 >> storage/logs/queue-cron.log 2>&1
+   ```
+
+### Updating code when `git pull` is killed
+
+Shared servers often OOM-kill Git. None of the recent changes added Composer
+packages, so a package install is not required — only the app files change.
+
+- **Easiest:** cPanel → **Git Version Control** → open the repository →
+  **Manage → Pull/Update from Remote**.
+- **Fallback (no Git):** download the branch zip from GitHub
+  (`Code → Download ZIP` on branch `arena/2fa4ced0-waflow`), upload it with
+  File Manager, extract, and copy everything **except** `.env`, `vendor/` and
+  `storage/` over the existing files. Then run `php artisan config:clear`.
+- **CLI alternative with lower memory use:**
+  ```bash
+  git fetch --depth=1 origin arena/2fa4ced0-waflow
+  git reset --hard FETCH_HEAD
+  php artisan config:clear
+  ```
+
+### Why nothing is logged when no webhook arrives
+
+An empty `jobs` table and empty `laravel.log` mean Shopify has not delivered an
+event yet — the queue worker has nothing to do. Verify, in order:
+
+1. The app configuration was deployed (`shopify app deploy`) and the
+   subscriptions appear in Partner Dashboard → Configuration → Webhooks,
+   including their latest HTTP response code.
+2. The app is installed on the store and the shop row has a stored token.
+3. The endpoint is publicly reachable — opening
+   `https://YOUR-DOMAIN/api/webhooks/shopify` in a browser must return a 405 or
+   401 page (any response proves the route is reachable; a timeout or host
+   error means DNS/firewall/document-root trouble).
+4. `SHOPIFY_API_SECRET` in `.env` exactly matches the client secret in Partner
+   Dashboard — a mismatch makes every delivery fail HMAC verification (401) and
+   nothing is stored or logged as a webhook event.
+
 ## After every code deploy
 
 Workers hold code in memory, so restart them after `git pull`:
