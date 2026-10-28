@@ -3,6 +3,7 @@
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\MessageLogController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PrivacyRequestController;
 use App\Http\Controllers\WebhookEventController;
@@ -44,6 +45,9 @@ Route::middleware(['shop.connected','shop.billed'])->group(function(){
  Route::get('/orders',[OrderController::class,'index'])->name('orders.index');
  Route::post('/orders/sync',[OrderController::class,'sync'])->name('orders.sync');
  Route::get('/webhooks',[WebhookEventController::class,'index'])->name('webhooks.index');
+ Route::get('/messages',[MessageLogController::class,'index'])->name('messages.index');
+ Route::post('/messages/{messageLog}/retry',[MessageLogController::class,'retry'])->middleware('throttle:20,1')->name('messages.retry');
+ Route::post('/messages/{messageLog}/manual',[MessageLogController::class,'markManual'])->middleware('throttle:20,1')->name('messages.manual');
  Route::post('/orders/{order}/decision',[OrderController::class,'decide'])->name('orders.decide');
  Route::get('/analytics',function(\Illuminate\Http\Request $r){$shop=$r->attributes->get('currentShop');$total=$shop->verifications()->count();$confirmed=$shop->verifications()->where('status','confirmed')->count();$pending=$shop->verifications()->whereIn('status',['pending','reminded'])->count();$runs=$shop->executions()->whereDate('created_at',today())->count();$messages=$shop->messageLogs()->whereDate('created_at',today())->count();return view('analytics',compact('shop','total','confirmed','pending','runs','messages'));})->name('analytics');
 });

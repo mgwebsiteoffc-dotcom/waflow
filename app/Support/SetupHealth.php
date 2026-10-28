@@ -25,6 +25,7 @@ class SetupHealth
         'delivered' => 'Delivered on WhatsApp',
         'read' => 'Read by the customer',
         'accepted' => 'Accepted by the provider',
+        'manual' => 'Manually sent by the team',
         'failed' => 'Send failed — check the logged error',
         'unknown' => 'Uncertain delivery — blocked from auto-resend to avoid duplicates',
         'skipped_no_opt_in' => 'Skipped: no recorded order-update WhatsApp opt-in',
@@ -337,7 +338,7 @@ class SetupHealth
                 'status' => $status,
                 'count' => (int) $count,
                 'label' => self::MESSAGE_STATUS_LABELS[$status] ?? ucfirst(str_replace('_', ' ', (string) $status)),
-                'tone' => in_array($status, ['sent', 'delivered', 'read', 'accepted'], true) ? 'ok' : (in_array($status, ['failed', 'unknown'], true) ? 'error' : 'warn'),
+                'tone' => in_array($status, ['sent', 'delivered', 'read', 'accepted', 'manual'], true) ? 'ok' : (in_array($status, ['failed', 'unknown'], true) ? 'error' : 'warn'),
             ];
         }
         usort($outcomes, fn ($a, $b) => $b['count'] <=> $a['count']);
