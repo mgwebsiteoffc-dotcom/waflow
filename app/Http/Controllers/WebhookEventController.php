@@ -19,6 +19,12 @@ class WebhookEventController extends Controller
             'pending' => (clone $shop->webhookEvents())->whereNull('processed_at')->whereNull('processing_error')->count(),
             'errors' => (clone $shop->webhookEvents())->whereNotNull('processing_error')->count(),
         ];
-        return view('webhooks.index', compact('events', 'totals'));
+        $readiness = [
+            'credentials' => (bool) config('services.shopify.api_key') && (bool) config('services.shopify.api_secret'),
+            'store_installed' => (bool) ($shop?->installed && $shop?->access_token),
+            'endpoint' => rtrim((string) config('app.url'), '/').'/api/webhooks/shopify',
+            'client_id' => (string) config('services.shopify.api_key'),
+        ];
+        return view('webhooks.index', compact('events', 'totals', 'readiness'));
     }
 }
