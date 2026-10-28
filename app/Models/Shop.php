@@ -14,4 +14,5 @@ class Shop extends Model {
  public function whatsappConsents(){return $this->hasMany(WhatsAppConsent::class);}
  public function whatsappMarketingConsents(){return $this->hasMany(WhatsAppMarketingConsent::class);}
  public function abandonedCheckouts(){return $this->hasMany(AbandonedCheckout::class);}
+ public function widgetSetting(){return $this->hasOne(WidgetSetting::class);}
 }

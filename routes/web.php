@@ -5,6 +5,7 @@ use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PrivacyRequestController;
 use App\Http\Controllers\WebhookEventController;
+use App\Http\Controllers\WidgetController;
 use App\Http\Controllers\WorkflowController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +31,8 @@ Route::middleware('shop.connected')->group(function(){
  Route::delete('/automations/{workflow}',[WorkflowController::class,'destroy'])->name('automations.destroy');
  Route::get('/executions',[WorkflowController::class,'executions'])->name('executions.index');
  Route::get('/privacy-requests/{privacyRequest}/export',[PrivacyRequestController::class,'download'])->name('privacy.export');
+ Route::get('/widget',[WidgetController::class,'edit'])->name('widget.edit');
+ Route::put('/widget',[WidgetController::class,'update'])->name('widget.update');
  Route::get('/orders',[OrderController::class,'index'])->name('orders.index');
  Route::post('/orders/sync',[OrderController::class,'sync'])->name('orders.sync');
  Route::get('/webhooks',[WebhookEventController::class,'index'])->name('webhooks.index');

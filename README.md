@@ -80,6 +80,16 @@ The checked-in TOML is configured as `embedded = false`, matching the current se
 6. Configure Whatify to POST signed inbound reply events to `/api/webhooks/whatify/inbound`, and set `WHATIFY_WEBHOOK_SECRET` only after confirming Whatify's exact event schema and signature contract. `STOP`, `UNSUBSCRIBE`, `OPT OUT`, `END`, and `QUIT` opt the phone out of both consent purposes, scrub pending recovery data, and cancel queued/running/waiting executions. A stale checkout attribute/order tag cannot reverse STOP; re-opt-in requires an explicit opt-in on a checkout/order created afterward. Other replies route to a unique waiting workflow. The Whatify inbound signing/payload format has not been live-verified.
 7. Use transactional utility content for order notices only—no upsell or promotional material in order templates. Cart recovery is marketing-purpose and requires a marketing template. Monitor template status, quality, limits, and category; Meta review/re-categorization is not guaranteed.
 
+## Website widget — entry/exit popups and floating WhatsApp button
+
+**Website widget** (`/widget`) configures a storefront lead-capture widget per shop. The settings page provides a single copy-paste snippet (`<script defer src="https://APP-URL/api/widget/{shop}.myshopify.com/widget.js"></script>`) for `theme.liquid` or any website; changing settings never requires changing the snippet.
+
+- **Entry popup**: name + WhatsApp number form, shown after a configurable delay (0–300 s), with a per-visitor frequency cap (cookie for N days, or session-only when set to 0).
+- **Exit-intent popup**: fires on desktop when the cursor leaves the viewport at the top, and on mobile when the visitor scrolls back to the top after scrolling deep. Same frequency control.
+- **Floating WhatsApp button**: fixed bottom-left/right button in a configurable color, opening `wa.me` with a pre-filled message.
+- **Capture endpoint** `POST /api/widget/{shop}/capture` (throttled, no session/CSRF, shop identified by domain): validates name and phone, normalizes the number, and upserts `whatsapp_consents` with source `website_entry` / `website_exit`. An explicit new form submission is fresh consent and reverses a previous STOP for that number. Phone numbers stay encrypted at rest; the public script never contains secrets.
+- Popups and the button are pure vanilla JavaScript (no dependencies), scoped under `wf-` CSS classes, and render nothing when all features are disabled. Captured leads appear in a table on the widget settings page and immediately count as active opt-ins for order-update WhatsApp automations.
+
 ## Predefined automations and health diagnostics
 
 Merchants do not have to build flows from scratch. **Automations → Templates gallery** (`/automations/presets`) installs predefined, publish-validated workflows. Each card maps its WhatsApp step to one of the shop's currently approved Whatify templates before creation:
@@ -135,6 +145,7 @@ Sensitive credentials, webhook payloads, message request/response details, recov
 - `app/Services/ShopifyAdmin.php` — Shopify GraphQL and rotating tokens
 - `app/Services/OrderSync.php` — GraphQL order backfill, connection test, shared order/opt-in/checkout ingest
 - `app/Services/WorkflowRunner.php` — workflow and opt-in enforcement
+- `app/Http/Controllers/WidgetController.php` — website popup/float-button settings, public `widget.js`, lead capture into consents
 - `app/Jobs` — queued webhooks, workflow runs, and privacy processing
 - `database/migrations` — MySQL schema
 - `shopify.app.toml` — OAuth scopes and app-specific webhook subscriptions
