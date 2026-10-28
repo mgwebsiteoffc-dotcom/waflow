@@ -190,6 +190,7 @@ verified.
 The charge is implemented with the Shopify Billing API
 (`appPurchaseOneTimeCreate`) and verified server-side before the app unlocks.
 
+0. Partner Dashboard → **Distribution → choose Shopify App Store (public)**. The Billing API is rejected for custom/private distribution with *"Apps without a public distribution cannot use the Billing API"*; a draft public listing is sufficient, App Store approval is not required to test.
 1. Partner Dashboard → **Pricing → Add plan → One-time charge**.
 2. Amount: **1.00 USD**, name: `Whatify Flow — lifetime access`.
 3. On the server set:
@@ -249,6 +250,7 @@ matching Shopify requirements 4.4.4 and 4.4.5.
 
 ## 13. Pre-submission checklist
 
+- [ ] Set distribution to **Shopify App Store (public)** so the Billing API is accepted (draft listing is enough for testing)
 - [ ] Replace `client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"` in `shopify.app.toml`
 - [ ] `shopify app config link` then `shopify app deploy` (registers webhooks)
 - [ ] Install on a development store and run the 8 reviewer steps above

@@ -9,7 +9,8 @@ class BillingController extends Controller {
   $price = number_format((float) config('services.shopify.one_time_price'), 2);
   $currency = config('services.shopify.billing_currency');
   $testMode = (bool) config('services.shopify.billing_test_mode');
-  return view('billing.index', compact('shop','price','currency','testMode'));
+  $localDriver = config('services.shopify.billing_driver') === 'local';
+  return view('billing.index', compact('shop','price','currency','testMode','localDriver'));
  }
 
  public function start(Request $r, ShopifyBilling $billing){

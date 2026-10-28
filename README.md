@@ -85,8 +85,16 @@ The checked-in TOML is configured as `embedded = false`, matching the current se
 The app implements the Shopify Billing GraphQL API (`appPurchaseOneTimeCreate`) for a single one-time charge — default **$1.00 USD, no subscription**. Configuration lives in `config/services.php` under `shopify.*` and is environment-driven:
 
 - `SHOPIFY_BILLING_ENABLED` (default `true`) — master switch; set `false` to disable gating entirely.
+- `SHOPIFY_BILLING_DRIVER` — `shopify` (default, real Billing API) or `local` (development simulation).
 - `SHOPIFY_BILLING_TEST_MODE` — `true` creates Shopify test charges for development/review stores; must be `false` for production.
 - `SHOPIFY_ONE_TIME_PRICE`, `SHOPIFY_BILLING_CURRENCY`, `SHOPIFY_BILLING_NAME`.
+
+**Distribution requirement:** Shopify rejects Billing API calls with *"Apps without a public distribution cannot use the Billing API"* unless the app's distribution method is **Shopify App Store (public)** in Partner Dashboard, even while the listing is still in draft/review. Custom and private distribution apps cannot use billing at all.
+
+**Two ways to test payment:**
+
+1. **Local simulation (no Shopify dependency):** set `SHOPIFY_BILLING_DRIVER=local`. The Billing page shows a simulation banner; clicking pay redirects to the internal callback (with `?simulated=1`) instead of Shopify, marks the charge ACTIVE and unlocks the app. No external API call and no real charge. Never use this driver in production.
+2. **Real Shopify test charge:** keep `SHOPIFY_BILLING_DRIVER=shopify`, set `SHOPIFY_BILLING_TEST_MODE=true`, choose public distribution in Partner Dashboard, and install on a **development store**. The Shopify confirmation screen shows a test-charge banner and no money moves; the return callback verifies the ACTIVE purchase normally.
 
 Flow: an unpaid shop is redirected by the `shop.billed` middleware (`EnsureBilled`) to `/billing`; starting payment creates the charge and redirects to Shopify's confirmation screen; the return callback re-queries `oneTimePurchases` and unlocks the app only when a purchase is `ACTIVE`. Charge state is cached for five minutes and persisted on `shops` (`billing_status`, `billing_charge_id`, `billing_amount`, `billing_currency`, `billing_confirmed_at`). The dashboard, integrations and billing pages stay reachable while unpaid so setup can continue; JSON clients receive HTTP 402. Reinstalling a shop starts a fresh charge. The Partner Dashboard pricing plan must be created as a matching one-time $1 USD plan, and `SHOPIFY_BILLING_TEST_MODE=true` must be set while the app is under Shopify review.
 

@@ -37,6 +37,11 @@
    <div><span class="tick">✓</span> Health diagnostics, analytics and lead capture</div>
   </div>
 
+  @if($localDriver)
+   <div class="notice" style="margin:0 0 18px;background:#fff7e6;border-color:#f5e7bd"><span style="color:#a77b20">ⓘ</span><p style="color:#8c6814"><strong>Simulation mode is on.</strong> SHOPIFY_BILLING_DRIVER=local — clicking pay mimics the Shopify redirect and approval inside this app. No real charge and no Shopify API call happens. Switch the driver back to <code>shopify</code> for the live Billing API.</p></div>
+  @elseif($testMode)
+   <div class="notice" style="margin:0 0 18px"><span>ⓘ</span><p><strong>Shopify test mode is on.</strong> The charge is created with the test flag, so approving it makes no real payment.</p></div>
+  @endif
   @if($shop->billing_status === 'active' && $shop->billing_confirmed_at)
    <a class="primary" href="{{ route('dashboard') }}" style="text-decoration:none;display:inline-block">Go to dashboard</a>
    <div class="plan-note" style="margin:14px 0 0">Payment confirmed{{ $shop->billing_confirmed_at ? ' on '.$shop->billing_confirmed_at->format('d M Y') : '' }}. Charge ID: {{ $shop->billing_charge_id ? \Illuminate\Support\Str::limit($shop->billing_charge_id, 40) : '—' }}</div>
@@ -44,7 +49,7 @@
    <form method="POST" action="{{ route('billing.start') }}">@csrf
     <button class="primary" type="submit" style="padding:14px 34px;font-size:13px">Pay ${{ $price }} once via Shopify</button>
    </form>
-   <div class="plan-note" style="margin-top:14px">You will be redirected to Shopify's secure payment screen, then returned here automatically.@if($testMode) <strong style="color:#a77b20">Test mode is on — no real charge is made.</strong>@endif</div>
+   <div class="plan-note" style="margin-top:14px">@if($localDriver)Simulation mode: approving returns you here and unlocks the app instantly, with no external payment screen.@else You will be redirected to Shopify's secure payment screen, then returned here automatically.@if($testMode) <strong style="color:#a77b20">Test mode is on — no real charge is made.</strong>@endif @endif</div>
   @endif
  </div>
 

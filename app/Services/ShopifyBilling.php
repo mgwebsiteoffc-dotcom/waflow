@@ -31,6 +31,13 @@ GRAPHQL;
   * @return array{confirmation_url:string, charge_id:?string}
   */
  public function createCharge(Shop $shop, string $returnUrl): array {
+  if ($this->driver() === 'local') {
+   // Development simulation: no Shopify API call, confirmation is an internal callback.
+   return [
+    'confirmation_url' => route('billing.callback', ['simulated' => '1'], absolute: true),
+    'charge_id' => 'gid://local/AppPurchaseOneTime/'.\Illuminate\Support\Str::random(16),
+   ];
+  }
   $variables = [
    'name' => (string) config('services.shopify.billing_name'),
    'returnUrl' => $returnUrl,
@@ -53,6 +60,19 @@ GRAPHQL;
   * Queries the shop's one-time purchases. Returns true when an ACTIVE purchase exists.
   */
  public function verifyPayment(Shop $shop, bool $forceRefresh = false): bool {
+  if ($this->driver() === 'local') {
+   // Development simulation driver: the internal callback is the proof of "approval".
+   Cache::forget('billing.active.'.$shop->id);
+   $shop->update([
+    'billing_status' => 'active',
+    'billing_charge_id' => $shop->billing_charge_id ?? 'gid://local/AppPurchaseOneTime/'.\Illuminate\Support\Str::random(16),
+    'billing_amount' => $shop->billing_amount ?? config('services.shopify.one_time_price'),
+    'billing_currency' => $shop->billing_currency ?? config('services.shopify.billing_currency'),
+    'billing_confirmed_at' => $shop->billing_confirmed_at ?? now(),
+   ]);
+   Cache::put('billing.active.'.$shop->id, true, now()->addMinutes(5));
+   return true;
+  }
   $cacheKey = 'billing.active.'.$shop->id;
   if (!$forceRefresh) {
    $cached = Cache::get($cacheKey);
@@ -73,6 +93,10 @@ GRAPHQL;
    ]);
   }
   return $paid;
+ }
+
+ private function driver(): string {
+  return config('services.shopify.billing_driver') === 'local' ? 'local' : 'shopify';
  }
 
  public function isPaid(Shop $shop): bool {
